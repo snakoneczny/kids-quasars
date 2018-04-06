@@ -1,0 +1,11 @@
+data_name: KiDS.DR3.STAR.x.SDSS.DR14
+
+catalog_name: KiDS.DR3.STAR
+
+model: rf
+
+features: all
+
+cut: r
+
+clean_sdss: True
