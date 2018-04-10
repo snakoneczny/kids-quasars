@@ -1,3 +1,4 @@
+import os
 import random
 import logging
 import math
@@ -151,7 +152,7 @@ def clean_kids(data, with_print=True):
     flag_mask = 0b01111111
     for c in IMA_FLAGS:
         mask &= (data_no_na[c] & flag_mask == 0)
-    if with_print: print('Removing ima-flags: {} left'.format(mask.sum()))
+    if with_print: print('Removing KiDS flags: {} left'.format(mask.sum()))
 
     # Tile flag
     # mask &= (data_no_na['TILE_FLAG'] == 0)
@@ -229,3 +230,29 @@ def number_count_analysis(ds, c=10):
         plt.plot(x, y, label='log N(≤ m)')
         plt.plot(x, y_norm, label='0.6 * m - {}'.format(c))
         plt.legend()
+
+
+def qso_catalogs_report(catalog):
+    qso_catalog_paths = [
+        '/media/snakoneczny/data/KiDS/KiDS.DR3.x.QSO.RICHARDS.2009.csv',
+        '/media/snakoneczny/data/KiDS/KiDS.DR3.x.QSO.RICHARDS.2015.csv',
+        '/media/snakoneczny/data/KiDS/KiDS.DR3.x.QSO.GALEX.csv',
+    ]
+
+    print('Catalog size: {}'.format(catalog.shape[0]))
+    print(describe_column(catalog['CLASS']))
+
+    for qso_catalog_path in qso_catalog_paths:
+        qso_catalog_report(qso_catalog_path, catalog)
+
+
+def qso_catalog_report(qso_catalog_path, catalog):
+    qso_catalog = pd.read_csv(qso_catalog_path, usecols=['ID'])
+    is_in_qso = catalog['ID'].isin(qso_catalog['ID'])
+    n_train_in_qso = sum(catalog.loc[is_in_qso, 'train'])
+
+    print('--------------------')
+    print(os.path.basename(qso_catalog_path))
+    print('QSO catalog size: {}'.format(qso_catalog.shape[0]))
+    print('Intersection size: {}, train elements: {}'.format(sum(is_in_qso), n_train_in_qso))
+    print(describe_column(catalog.loc[is_in_qso, 'CLASS']))
