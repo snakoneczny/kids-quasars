@@ -8,7 +8,7 @@ from tqdm import tqdm
 
 from utils import BAND_CALIB_COLUMNS, COLOR_COLUMNS, logger, process_kids, process_kids_data
 
-COLUMNS_TO_ADD = ['RAJ2000', 'DECJ2000', BAND_CALIB_COLUMNS, COLOR_COLUMNS]
+COLUMNS_TO_ADD = ['RAJ2000', 'DECJ2000', 'CLASS_STAR', BAND_CALIB_COLUMNS, COLOR_COLUMNS]
 
 
 def create_catalog_chunk(data_chunk, y_pred_proba, classes):

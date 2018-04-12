@@ -71,8 +71,9 @@ SE_FLAGS = ['FLAG_U', 'FLAG_G', 'FLAG_R', 'FLAG_I']
 IMA_FLAGS = ['IMAFLAGS_ISO_U', 'IMAFLAGS_ISO_G', 'IMAFLAGS_ISO_R', 'IMAFLAGS_ISO_I']
 
 FEATURES = {
+    'all': np.concatenate([BAND_CALIB_COLUMNS, COLOR_COLUMNS, ['CLASS_STAR']]),
+    'magnitudes + colors': np.concatenate([BAND_CALIB_COLUMNS, COLOR_COLUMNS]),
     'colors': COLOR_COLUMNS,
-    'all': np.concatenate([BAND_CALIB_COLUMNS, COLOR_COLUMNS])
 }
 
 
