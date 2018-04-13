@@ -72,8 +72,9 @@ IMA_FLAGS = ['IMAFLAGS_ISO_U', 'IMAFLAGS_ISO_G', 'IMAFLAGS_ISO_R', 'IMAFLAGS_ISO
 
 FEATURES = {
     'all': np.concatenate([BAND_CALIB_COLUMNS, COLOR_COLUMNS, ['CLASS_STAR']]),
-    'magnitudes + colors': np.concatenate([BAND_CALIB_COLUMNS, COLOR_COLUMNS]),
+    'magnitudes-colors': np.concatenate([BAND_CALIB_COLUMNS, COLOR_COLUMNS]),
     'colors': COLOR_COLUMNS,
+    'colors-cstar': np.concatenate([COLOR_COLUMNS, ['CLASS_STAR']]),
 }
 
 
@@ -97,7 +98,10 @@ def process_kids_data(data, sdss_cleaning=False, cut=None, with_print=True):
     
     if cut:
         data = CUT_FUNCTIONS[cut](data, with_print=with_print)
-    
+
+    # TODO: two separate models
+    # data = data.loc[data['CLASS_STAR'] < 0.5]
+
     return data.reset_index(drop=True)
 
 
@@ -201,7 +205,7 @@ def describe_column(data):
     return values, counts, contribution
 
 
-def print_rf_feature_ranking(model, X):
+def print_feature_ranking(model, X):
     importances = model.feature_importances_
     indices = np.argsort(importances)[::-1]
     logger.info('feature ranking')

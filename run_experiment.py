@@ -7,7 +7,7 @@ import numpy as np
 from sklearn.model_selection import KFold, train_test_split
 from sklearn.metrics import accuracy_score, f1_score
 
-from utils import logger, process_kids, print_rf_feature_ranking
+from utils import logger, process_kids, print_feature_ranking
 
 timestamp_start = datetime.datetime.now().strftime('%Y-%m-%d_%H:%M:%S')
 
@@ -87,7 +87,7 @@ for metric_name, metric_func in metrics.items():
     score = np.around(metric_func(y_test, y_pred_test), 4)
     logger.info('Test {metric_name}: {score}'.format(metric_name=metric_name, score=score))
 
-print_rf_feature_ranking(model, X_train_val)
+print_feature_ranking(model, X_train_val)
 
 # Save predictions df
 if args.save:

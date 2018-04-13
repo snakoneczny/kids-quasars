@@ -4,7 +4,7 @@ catalog_name: KiDS.DR3.merged
 
 model: rf
 
-features: colors
+features: colors-cstar
 
 cut: u-g
 

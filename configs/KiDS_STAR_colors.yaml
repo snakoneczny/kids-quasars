@@ -4,7 +4,7 @@ catalog_name: KiDS.DR3.STAR
 
 model: rf
 
-features: colors
+features: colors-cstar
 
 cut: u-g
 
