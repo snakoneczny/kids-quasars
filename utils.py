@@ -261,3 +261,10 @@ def qso_catalog_report(qso_catalog_path, catalog):
     print('QSO catalog size: {}'.format(qso_catalog.shape[0]))
     print('Intersection size: {}, train elements: {}'.format(sum(is_in_qso), n_train_in_qso))
     print(describe_column(catalog.loc[is_in_qso, 'CLASS']))
+
+
+def r_train_test_split(*args, train_val, test):
+    splitted_list = []
+    for arg in args:
+        splitted_list.extend([arg[train_val], arg[test]])
+    return splitted_list

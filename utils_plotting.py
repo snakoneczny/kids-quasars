@@ -62,6 +62,19 @@ def plot_roc_curve(fpr, tpr, roc_auc):
     plt.show()
 
 
+def plot_precision_recall_curve(precisions, recalls, average_precision, precision, recall):
+    plt.step(recalls, precisions, color='b', alpha=0.2, where='post')
+    plt.fill_between(recalls, precisions, step='post', alpha=0.2, color='b')
+
+    plt.plot(precision, recall, marker='o', markersize=3, color='red')
+
+    plt.xlabel('Recall')
+    plt.ylabel('Precision')
+    plt.ylim([0.0, 1.05])
+    plt.xlim([0.0, 1.0])
+    plt.title('Precision-Recall curve: AP={0:0.2f}'.format(average_precision))
+
+
 def plot_class_histograms(data, columns):
     for c in columns:
         plt.figure()

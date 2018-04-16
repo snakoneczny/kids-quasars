@@ -7,7 +7,7 @@ import numpy as np
 from sklearn.model_selection import KFold, train_test_split
 from sklearn.metrics import accuracy_score, f1_score
 
-from utils import logger, process_kids, print_feature_ranking
+from utils import logger, process_kids, print_feature_ranking, MAG_GAAP_CALIB_R
 
 timestamp_start = datetime.datetime.now().strftime('%Y-%m-%d_%H:%M:%S')
 
@@ -34,6 +34,7 @@ y = data['CLASS']
 
 classes = np.unique(y)
 logger.info('Available classes: {}'.format(np.unique(y, return_counts=True)))
+
 
 # Train test split
 X_train_val, X_test, y_train_val, y_test, idx_train_val, idx_test = train_test_split(X, y, X.index, test_size=0.2,
