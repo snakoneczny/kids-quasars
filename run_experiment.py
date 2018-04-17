@@ -26,7 +26,7 @@ metrics = {
 
 # Read data
 data_path = '/media/snakoneczny/data/KiDS/{data_name}.cols.csv'.format(data_name=cfg['data_name'])
-data = process_kids(data_path, sdss_cleaning=True, cut=cfg['cut'])
+data = process_kids(data_path, subset=cfg['subset'], sdss_cleaning=cfg['clean_sdss'], cut=cfg['cut'])
 
 # Create X and y
 X = data[cfg['features']]
@@ -34,7 +34,6 @@ y = data['CLASS']
 
 classes = np.unique(y)
 logger.info('Available classes: {}'.format(np.unique(y, return_counts=True)))
-
 
 # Train test split
 X_train_val, X_test, y_train_val, y_test, idx_train_val, idx_test = train_test_split(X, y, X.index, test_size=0.2,

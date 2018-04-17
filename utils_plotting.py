@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
+import healpy as hp
 
 
 def plot_embedding(embedding, labels, label_name='class'):
@@ -81,3 +82,9 @@ def plot_class_histograms(data, columns):
         for t in ['STAR', 'GALAXY', 'QSO']:
             sns.distplot(data.loc[data['CLASS'] == t][c], label=t, kde=False, rug=False, hist_kws={'alpha': 0.5})
         plt.legend()
+
+
+def plot_map(hpxmap, unit='counts per pixel'):
+    cmap = plt.get_cmap('hot_r')
+    hp.mollzoom(hpxmap, cmap=cmap, nest=False, xsize=1600, unit=unit, title='Galactic coordinates')
+    hp.graticule()

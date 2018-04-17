@@ -1,0 +1,13 @@
+data_name: KiDS.DR3.x.SDSS.DR14
+
+catalog_name: KiDS.DR3.merged
+
+subset: star
+
+clean_sdss: True
+
+model: rf
+
+features: colors-cstar
+
+cut: u-g

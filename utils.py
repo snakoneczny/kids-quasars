@@ -6,6 +6,8 @@ import math
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import healpy as hp
+
 
 logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s', datefmt='%d/%m/%Y %H:%M:%S', level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -78,29 +80,30 @@ FEATURES = {
 }
 
 
-def process_kids(path, sdss_cleaning=False, cut=None, n=None, with_print=True):
+def process_kids(path, subset=None, sdss_cleaning=False, cut=None, n=None, with_print=True):
     if n is not None:
         data = read_random_sample(path, n)
     else:
         data = pd.read_csv(path)
 
-    return process_kids_data(data, sdss_cleaning=sdss_cleaning, cut=cut, with_print=with_print)
+    return process_kids_data(data, subset=subset, sdss_cleaning=sdss_cleaning, cut=cut, with_print=with_print)
 
 
-def process_kids_data(data, sdss_cleaning=False, cut=None, with_print=True):
+def process_kids_data(data, subset=None, sdss_cleaning=False, cut=None, with_print=True):
     if with_print: print('Data shape: {}'.format(data.shape))
-    
+
     data = clean_kids(data, with_print)
-    data = calib_mag_for_ext(data)
-    
+
+    if subset:
+        data = get_subset(data, subset, with_print)
+
     if sdss_cleaning:
         data = clean_sdss(data)
-    
+
+    data = calib_mag_for_ext(data)
+
     if cut:
         data = CUT_FUNCTIONS[cut](data, with_print=with_print)
-
-    # TODO: two separate models
-    # data = data.loc[data['CLASS_STAR'] < 0.5]
 
     return data.reset_index(drop=True)
 
@@ -125,6 +128,19 @@ def add_sdss_info(data, sdss_path):
     print(np.unique(data['CLASS_FILLED'], return_counts=True))
 
     return data, data_sdss
+
+
+def get_subset(data, subset, with_print=True):
+    if subset == 'star':
+        data_subset = data.loc[data['CLASS_STAR'] >= 0.5]
+    elif subset == 'non-star':
+        data_subset = data.loc[data['CLASS_STAR'] <= 0.5]
+    else:
+        raise (ValueError('{} is not an available subset'.format(subset)))
+
+    if with_print: print('Extracting {} subset: {}'.format(subset, data_subset.shape[0]))
+
+    return data_subset
 
 
 def clean_kids(data, with_print=True):
@@ -215,10 +231,10 @@ def print_feature_ranking(model, X):
 
 def number_count_analysis(ds, c=10):
     for b in BAND_CALIB_COLUMNS:
-        
+
         m_min = math.ceil(ds[b].min()) + 1
         m_max = math.ceil(ds[b].max()) - 1
-        
+
         x, y, y_norm = [], [], []
         for m in range(m_min, m_max + 1):
             x.append(m)
@@ -226,7 +242,7 @@ def number_count_analysis(ds, c=10):
             if v != 0:
                 v = math.log(v, 10)
             y.append(v)
-            
+
             y_norm.append(0.6 * m - c)
 
         plt.figure()
@@ -268,3 +284,30 @@ def r_train_test_split(*args, train_val, test):
     for arg in args:
         splitted_list.extend([arg[train_val], arg[test]])
     return splitted_list
+
+
+def get_map(l, b, nside=128):
+    # Set the number of sources and the coordinates for the input
+    npix = hp.nside2npix(nside)  # 12 * nside ^ 2
+
+    # Coordinates and the density field f
+    phis = l / 180. * math.pi
+    thetas = (-1. * b + 90.) / 180. * math.pi
+
+    # Initate the map and fill it with the values
+    hpxmap = np.zeros(npix, dtype=np.float)
+
+    # Go from HEALPix coordinates to indices
+    indices = hp.ang2pix(nside, thetas, phis, nest=False)
+    for i in indices:
+        hpxmap[i] += 1
+
+    return hpxmap
+
+
+def normalize_map(map, map_normalization):
+    normalized = np.zeros(map.shape)
+    for i in range(len(map)):
+        if map_normalization[i] != 0:
+            normalized[i] = map[i] / map_normalization[i]
+    return normalized
