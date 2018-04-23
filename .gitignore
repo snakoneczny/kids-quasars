@@ -5,9 +5,9 @@
 .ipynb_checkpoints/
 __pycache__/
 
-catalogs/
-experiments/
 plots/
 regions/
 report/
+maps/
 
+*.csv

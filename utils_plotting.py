@@ -1,5 +1,6 @@
 import itertools
 
+import scipy
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -84,7 +85,31 @@ def plot_class_histograms(data, columns):
         plt.legend()
 
 
-def plot_map(hpxmap, unit='counts per pixel'):
-    cmap = plt.get_cmap('hot_r')
+def plot_map(hpxmap, unit='counts per pixel', is_cmap=True):
+    cmap = plt.get_cmap('hot_r') if is_cmap else None
     hp.mollzoom(hpxmap, cmap=cmap, nest=False, xsize=1600, unit=unit, title='Galactic coordinates')
     hp.graticule()
+
+
+def plot_map_stats(m, lat, map_stars):
+    i_non_zero = np.nonzero(m)
+    m_to_plot = m[i_non_zero]
+    lat_to_plot = lat[i_non_zero]
+    map_stars_to_plot = map_stars[i_non_zero]
+
+    bin_means, bin_edges, bin_number = scipy.stats.binned_statistic(lat_to_plot, m_to_plot, statistic='mean', bins=60)
+    plt.bar(bin_edges[:-1], bin_means, bin_edges[1] - bin_edges[0], align='edge')
+    plt.xlabel('galactic latitude')
+    plt.ylabel('mean pixel density')
+
+    plt.figure()
+    bin_means, bin_edges, bin_number = scipy.stats.binned_statistic(lat_to_plot, map_stars_to_plot, statistic='mean', bins=60)
+    plt.bar(bin_edges[:-1], bin_means, bin_edges[1] - bin_edges[0], align='edge')
+    plt.xlabel('galactic latitude')
+    plt.ylabel('mean pixel density')
+    plt.title('Stars')
+
+    plt.figure()
+    sns.distplot(m_to_plot)
+    plt.xlabel('pixel density')
+    plt.ylabel('counts')

@@ -8,7 +8,6 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import healpy as hp
 
-
 logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s', datefmt='%d/%m/%Y %H:%M:%S', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -253,7 +252,7 @@ def number_count_analysis(ds, c=10):
         plt.legend()
 
 
-def qso_catalogs_report(catalog):
+def qso_catalogs_report(catalog, save=False):
     qso_catalog_paths = [
         '/media/snakoneczny/data/KiDS/KiDS.DR3.x.QSO.RICHARDS.2009.csv',
         '/media/snakoneczny/data/KiDS/KiDS.DR3.x.QSO.RICHARDS.2015.csv',
@@ -264,19 +263,22 @@ def qso_catalogs_report(catalog):
     print(describe_column(catalog['CLASS']))
 
     for qso_catalog_path in qso_catalog_paths:
-        qso_catalog_report(qso_catalog_path, catalog)
+        qso_catalog_report(qso_catalog_path, catalog, save=save)
 
 
-def qso_catalog_report(qso_catalog_path, catalog):
+def qso_catalog_report(qso_catalog_path, catalog, save=False):
     qso_catalog = pd.read_csv(qso_catalog_path, usecols=['ID'])
     is_in_qso = catalog['ID'].isin(qso_catalog['ID'])
     n_train_in_qso = sum(catalog.loc[is_in_qso, 'train'])
 
     print('--------------------')
     print(os.path.basename(qso_catalog_path))
-    print('QSO catalog size: {}'.format(qso_catalog.shape[0]))
-    print('Intersection size: {}, train elements: {}'.format(sum(is_in_qso), n_train_in_qso))
+    print('QSO catalog x KiDS size: {}'.format(qso_catalog.shape[0]))
+    print('QSO catalog x KiDS catalog size: {}, train elements: {}'.format(sum(is_in_qso), n_train_in_qso))
     print(describe_column(catalog.loc[is_in_qso, 'CLASS']))
+
+    if save:
+        catalog.loc[is_in_qso].to_csv('catalogs_intersection/{}.csv'.format(os.path.basename(qso_catalog_path)))
 
 
 def r_train_test_split(*args, train_val, test):
@@ -286,7 +288,7 @@ def r_train_test_split(*args, train_val, test):
     return splitted_list
 
 
-def get_map(l, b, nside=128):
+def get_map(l, b, nside=256):
     # Set the number of sources and the coordinates for the input
     npix = hp.nside2npix(nside)  # 12 * nside ^ 2
 
@@ -302,7 +304,38 @@ def get_map(l, b, nside=128):
     for i in indices:
         hpxmap[i] += 1
 
-    return hpxmap
+    lon, lat = hp.pixelfunc.pix2ang(nside, range(npix), nest=False, lonlat=True)
+
+    return hpxmap, lon, lat
+
+
+def get_weighted_map(data_path='maps/2MASS_XSC_full_density_gallactic.csv', nside=256):
+    npix = 12 * nside ** 2
+
+    data = pd.read_csv(data_path)
+
+    phis = data['GAL_LONG'] / 180. * math.pi
+    thetas = (-1. * data['GAL_LAT'] + 90.) / 180. * math.pi
+    indices = hp.ang2pix(nside, thetas, phis, nest=False)
+
+    pixel_sum = [0] * npix
+    pixel_w_sum = [0] * npix
+    pixel_w_mean = [0] * npix
+
+    for i in indices:
+        pixel_sum[i] += 1
+        pixel_w_sum[i] += data.loc[i, 'density']
+
+    for i in range(npix):
+        if pixel_sum[i] != 0:
+            pixel_w_mean[i] = pixel_w_sum[i] / pixel_sum[i]
+        else:
+            pixel_w_mean[i] = 0
+    pixel_w_mean = np.array(pixel_w_mean)
+
+    lon, lat = hp.pixelfunc.pix2ang(nside, range(npix), nest=False, lonlat=True)
+
+    return pixel_w_mean, lon, lat
 
 
 def normalize_map(map, map_normalization):
