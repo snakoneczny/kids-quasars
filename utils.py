@@ -30,6 +30,13 @@ COLOR_GAAPHOM_G_R = 'COLOR_GAAPHOM_G_R'
 COLOR_GAAPHOM_G_I = 'COLOR_GAAPHOM_G_I'
 COLOR_GAAPHOM_R_I = 'COLOR_GAAPHOM_R_I'
 
+RATIO_U_G = 'RATIO_U_G'
+RATIO_U_R = 'RATIO_U_R'
+RATIO_U_I = 'RATIO_U_I'
+RATIO_G_R = 'RATIO_G_R'
+RATIO_G_I = 'RATIO_G_I'
+RATIO_R_I = 'RATIO_R_I'
+
 BAND_COLUMNS = [
     MAG_GAAP_U,
     MAG_GAAP_G,
@@ -53,6 +60,15 @@ COLOR_COLUMNS = [
     COLOR_GAAPHOM_R_I,
 ]
 
+RATIO_COLUMNS = [
+    RATIO_U_G,
+    RATIO_U_R,
+    RATIO_U_I,
+    RATIO_G_R,
+    RATIO_G_I,
+    RATIO_R_I,
+]
+
 BAND_PAIRS = [
     (MAG_GAAP_CALIB_U, MAG_GAAP_CALIB_G),
     (MAG_GAAP_CALIB_U, MAG_GAAP_CALIB_R),
@@ -72,7 +88,7 @@ SE_FLAGS = ['FLAG_U', 'FLAG_G', 'FLAG_R', 'FLAG_I']
 IMA_FLAGS = ['IMAFLAGS_ISO_U', 'IMAFLAGS_ISO_G', 'IMAFLAGS_ISO_R', 'IMAFLAGS_ISO_I']
 
 FEATURES = {
-    'all': np.concatenate([BAND_CALIB_COLUMNS, COLOR_COLUMNS, ['CLASS_STAR']]),
+    'all': np.concatenate([BAND_CALIB_COLUMNS, COLOR_COLUMNS, RATIO_COLUMNS, ['CLASS_STAR']]),
     'magnitudes-colors': np.concatenate([BAND_CALIB_COLUMNS, COLOR_COLUMNS]),
     'colors': COLOR_COLUMNS,
     'colors-cstar': np.concatenate([COLOR_COLUMNS, ['CLASS_STAR']]),
@@ -103,6 +119,8 @@ def process_kids_data(data, subset=None, sdss_cleaning=False, cut=None, with_pri
 
     if cut:
         data = CUT_FUNCTIONS[cut](data, with_print=with_print)
+
+    data = add_magnitude_ratio(data)
 
     return data.reset_index(drop=True)
 
@@ -213,6 +231,14 @@ CUT_FUNCTIONS = {
 }
 
 
+def add_magnitude_ratio(data):
+    for column_x, column_y in BAND_PAIRS:
+        band_x = column_x.split('_')[-1]
+        band_y = column_y.split('_')[-1]
+        data['RATIO_{}_{}'.format(band_x, band_y)] = data[column_x] / data[column_y]
+    return data
+
+
 def describe_column(data):
     values, counts = np.unique(data, return_counts=True)
     s = sum(counts)
@@ -288,7 +314,7 @@ def r_train_test_split(*args, train_val, test):
     return splitted_list
 
 
-def get_map(l, b, nside=256):
+def get_map(l, b, nside=128):
     # Set the number of sources and the coordinates for the input
     npix = hp.nside2npix(nside)  # 12 * nside ^ 2
 
@@ -309,7 +335,7 @@ def get_map(l, b, nside=256):
     return hpxmap, lon, lat
 
 
-def get_weighted_map(data_path='maps/2MASS_XSC_full_density_gallactic.csv', nside=256):
+def get_weighted_map(data_path='maps/2MASS_XSC_full_density_gallactic.csv', nside=128):
     npix = 12 * nside ** 2
 
     data = pd.read_csv(data_path)

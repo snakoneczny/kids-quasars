@@ -8,16 +8,23 @@ import seaborn as sns
 import healpy as hp
 
 
-def plot_embedding(embedding, labels, label_name='class'):
-    labels_unique = np.unique(labels)
-    n_colors = len(labels_unique)
-    color_palette = sns.color_palette('muted', n_colors)
-    color_palette = {labels_unique[k]: v for k, v in enumerate(color_palette)}
-    color_palette['UNKNOWN'] = (0.6, 0.6, 0.6)
+def plot_embedding(embedding, labels, label='class', is_continuous=False, alpha=0.5):
+    if not is_continuous:
+        labels_unique = np.unique(labels)
+        n_colors = len(labels_unique)
+        color_palette = sns.color_palette('muted', n_colors)
+        color_palette = {labels_unique[k]: v for k, v in enumerate(color_palette)}
+        color_palette['UNKNOWN'] = (0.6, 0.6, 0.6)
 
-    data = pd.DataFrame({'x': embedding[:, 0], 'y': embedding[:, 1], label_name: labels})
-    sns.lmplot(x='x', y='y', hue=label_name, data=data, palette=color_palette, fit_reg=False, scatter_kws={'alpha': 0.5},
-               size=7)
+        data = pd.DataFrame({'x': embedding[:, 0], 'y': embedding[:, 1], label: labels})
+        sns.lmplot(x='x', y='y', hue=label, data=data, palette=color_palette, fit_reg=False,
+                   scatter_kws={'alpha': alpha}, size=7)
+    else:
+        cmap = sns.cubehelix_palette(as_cmap=True)
+        f, ax = plt.subplots(figsize=(9, 7))
+        points = ax.scatter(embedding[:, 0], embedding[:, 1], c=labels, s=50, cmap=cmap, alpha=alpha)
+        cb = f.colorbar(points)
+        cb.set_label(label)
 
 
 def plot_confusion_matrix(cm, classes,
@@ -91,25 +98,39 @@ def plot_map(hpxmap, unit='counts per pixel', is_cmap=True):
     hp.graticule()
 
 
-def plot_map_stats(m, lat, map_stars):
+def plot_partial_map_stats(m, lat, map_stars=None, title=None):
     i_non_zero = np.nonzero(m)
     m_to_plot = m[i_non_zero]
     lat_to_plot = lat[i_non_zero]
-    map_stars_to_plot = map_stars[i_non_zero]
+    map_stars_to_plot = map_stars[i_non_zero] if map_stars is not None else None
 
-    bin_means, bin_edges, bin_number = scipy.stats.binned_statistic(lat_to_plot, m_to_plot, statistic='mean', bins=60)
-    plt.bar(bin_edges[:-1], bin_means, bin_edges[1] - bin_edges[0], align='edge')
+    plot_map_stats(m_to_plot, lat_to_plot, map_stars_to_plot, title)
+
+
+def plot_map_stats(m, lat, map_stars=None, title=None, xlim=None):
+    bins = 50
+    bin_means, bin_edges, bin_number = scipy.stats.binned_statistic(lat, m, statistic='mean', bins=bins)
+    # plt.bar(bin_edges[:-1], bin_means, bin_edges[1] - bin_edges[0], align='edge')
+    # plt.hlines(bin_means, bin_edges[:-1], bin_edges[1:])
+    plt.plot(bin_edges[:-1], bin_means)
+    plt.xlim(xlim)
     plt.xlabel('galactic latitude')
     plt.ylabel('mean pixel density')
+    plt.title(title)
+
+    if map_stars is not None:
+        plt.figure()
+        bin_means, bin_edges, bin_number = scipy.stats.binned_statistic(lat, map_stars, statistic='mean', bins=bins)
+        # plt.bar(bin_edges[:-1], bin_means, bin_edges[1] - bin_edges[0], align='edge')
+        # plt.hlines(bin_means, bin_edges[:-1], bin_edges[1:])
+        plt.plot(bin_edges[:-1], bin_means, label='stars')
+        plt.xlim(xlim)
+        plt.xlabel('galactic latitude')
+        plt.ylabel('mean pixel density')
+        plt.title('stars')
 
     plt.figure()
-    bin_means, bin_edges, bin_number = scipy.stats.binned_statistic(lat_to_plot, map_stars_to_plot, statistic='mean', bins=60)
-    plt.bar(bin_edges[:-1], bin_means, bin_edges[1] - bin_edges[0], align='edge')
-    plt.xlabel('galactic latitude')
-    plt.ylabel('mean pixel density')
-    plt.title('Stars')
-
-    plt.figure()
-    sns.distplot(m_to_plot)
+    sns.distplot(m)
     plt.xlabel('pixel density')
     plt.ylabel('counts')
+    plt.title(title)

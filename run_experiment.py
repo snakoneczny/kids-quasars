@@ -4,12 +4,10 @@ from config_parser import parse_config
 from functools import partial
 
 import numpy as np
-import pandas as pd
 from sklearn.model_selection import KFold, train_test_split
 from sklearn.metrics import accuracy_score, f1_score
-from sklearn.utils import resample
 
-from utils import logger, process_kids, print_feature_ranking, MAG_GAAP_CALIB_R
+from utils import logger, process_kids, print_feature_ranking
 
 timestamp_start = datetime.datetime.now().strftime('%Y-%m-%d_%H:%M:%S')
 
@@ -30,7 +28,7 @@ metrics = {
 data_path = '/media/snakoneczny/data/KiDS/{data_name}.cols.csv'.format(data_name=cfg['data_name'])
 data = process_kids(data_path, subset=cfg['subset'], sdss_cleaning=cfg['clean_sdss'], cut=cfg['cut'])
 
-# Create X and y
+# Get X and y
 X = data[cfg['features']]
 y = data['CLASS']
 
@@ -53,7 +51,6 @@ for fold, (train, val) in enumerate(kf.split(X_train_val)):
     X_val, y_val = X_train_val.iloc[val], y_train_val.iloc[val]
     logger.info('fold {}/{}, train: {}, validation: {}'.format(fold + 1, n_folds, train.shape, val.shape))
 
-
     # print(X_train.shape)
     # # Separate majority and minority classes
     # X_pos, y_pos = X_train.loc[y == 'QSO'], y_train.loc[y == 'QSO']
@@ -66,7 +63,6 @@ for fold, (train, val) in enumerate(kf.split(X_train_val)):
     # X_train = pd.concat([X_pos_upsampled, X_neg])
     # y_train = pd.concat([y_pos_upsampled, y_neg])
     # print(X_train.shape)
-
 
     # Train a model
     model.fit(X_train, y_train)
