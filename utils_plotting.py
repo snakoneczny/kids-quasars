@@ -84,11 +84,12 @@ def plot_precision_recall_curve(precisions, recalls, average_precision, precisio
     plt.title('Precision-Recall curve: AP={0:0.2f}'.format(average_precision))
 
 
-def plot_class_histograms(data, columns):
+def plot_class_histograms(data, columns, title=None):
     for c in columns:
         plt.figure()
         for t in ['STAR', 'GALAXY', 'QSO']:
             sns.distplot(data.loc[data['CLASS'] == t][c], label=t, kde=False, rug=False, hist_kws={'alpha': 0.5})
+            plt.title(title)
         plt.legend()
 
 
@@ -109,7 +110,12 @@ def plot_partial_map_stats(m, lat, map_stars=None, title=None):
 
 def plot_map_stats(m, lat, map_stars=None, title=None, xlim=None):
     bins = 50
-    bin_means, bin_edges, bin_number = scipy.stats.binned_statistic(lat, m, statistic='mean', bins=bins)
+
+    m_to_show = m[m > 0]
+    lat_to_show = lat[m > 0]
+    map_stars_to_show = map_stars[m > 0]
+
+    bin_means, bin_edges, bin_number = scipy.stats.binned_statistic(lat_to_show, m_to_show, statistic='mean', bins=bins)
     # plt.bar(bin_edges[:-1], bin_means, bin_edges[1] - bin_edges[0], align='edge')
     # plt.hlines(bin_means, bin_edges[:-1], bin_edges[1:])
     plt.plot(bin_edges[:-1], bin_means)
@@ -120,7 +126,7 @@ def plot_map_stats(m, lat, map_stars=None, title=None, xlim=None):
 
     if map_stars is not None:
         plt.figure()
-        bin_means, bin_edges, bin_number = scipy.stats.binned_statistic(lat, map_stars, statistic='mean', bins=bins)
+        bin_means, bin_edges, bin_number = scipy.stats.binned_statistic(lat_to_show, map_stars_to_show, statistic='mean', bins=bins)
         # plt.bar(bin_edges[:-1], bin_means, bin_edges[1] - bin_edges[0], align='edge')
         # plt.hlines(bin_means, bin_edges[:-1], bin_edges[1:])
         plt.plot(bin_edges[:-1], bin_means, label='stars')
@@ -130,7 +136,7 @@ def plot_map_stats(m, lat, map_stars=None, title=None, xlim=None):
         plt.title('stars')
 
     plt.figure()
-    sns.distplot(m)
+    sns.distplot(m_to_show)
     plt.xlabel('pixel density')
     plt.ylabel('counts')
     plt.title(title)

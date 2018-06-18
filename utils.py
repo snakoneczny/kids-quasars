@@ -3,10 +3,13 @@ import random
 import logging
 import math
 
+import scipy
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import healpy as hp
+
+from utils_plotting import plot_class_histograms
 
 logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s', datefmt='%d/%m/%Y %H:%M:%S', level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -89,6 +92,7 @@ IMA_FLAGS = ['IMAFLAGS_ISO_U', 'IMAFLAGS_ISO_G', 'IMAFLAGS_ISO_R', 'IMAFLAGS_ISO
 
 FEATURES = {
     'all': np.concatenate([BAND_CALIB_COLUMNS, COLOR_COLUMNS, RATIO_COLUMNS, ['CLASS_STAR']]),
+    'magnitudes-colors-cstar': np.concatenate([BAND_CALIB_COLUMNS, COLOR_COLUMNS, ['CLASS_STAR']]),
     'magnitudes-colors': np.concatenate([BAND_CALIB_COLUMNS, COLOR_COLUMNS]),
     'colors': COLOR_COLUMNS,
     'colors-cstar': np.concatenate([COLOR_COLUMNS, ['CLASS_STAR']]),
@@ -278,33 +282,56 @@ def number_count_analysis(ds, c=10):
         plt.legend()
 
 
-def qso_catalogs_report(catalog, save=False):
-    qso_catalog_paths = [
+def test_external_qso(catalog, save=False):
+    external_paths = [
         '/media/snakoneczny/data/KiDS/KiDS.DR3.x.QSO.RICHARDS.2009.csv',
         '/media/snakoneczny/data/KiDS/KiDS.DR3.x.QSO.RICHARDS.2015.csv',
         '/media/snakoneczny/data/KiDS/KiDS.DR3.x.QSO.GALEX.csv',
     ]
 
-    print('Catalog size: {}'.format(catalog.shape[0]))
+    print('catalog size: {}'.format(catalog.shape[0]))
     print(describe_column(catalog['CLASS']))
 
-    for qso_catalog_path in qso_catalog_paths:
-        qso_catalog_report(qso_catalog_path, catalog, save=save)
+    for external_path in external_paths:
+        external_catalog = pd.read_csv(external_path, usecols=['ID'])
+        test_against_external_catalog(external_catalog, external_path, catalog, save=save)
 
 
-def qso_catalog_report(qso_catalog_path, catalog, save=False):
-    qso_catalog = pd.read_csv(qso_catalog_path, usecols=['ID'])
-    is_in_qso = catalog['ID'].isin(qso_catalog['ID'])
-    n_train_in_qso = sum(catalog.loc[is_in_qso, 'train'])
+def test_gaia(catalog, catalog_x_gaia_path, class_column='CLASS', id_column='ID', save=False):
+    print('catalog size: {}'.format(catalog.shape[0]))
+    print(describe_column(catalog[class_column]))
+
+    catalog_x_gaia = pd.read_csv(catalog_x_gaia_path)
+
+    movement_mask = ~catalog_x_gaia[['parallax', 'pmdec', 'pmra']].isnull().any(axis=1)
+    catalog_x_gaia_movement = catalog_x_gaia.loc[movement_mask]
+
+    test_against_external_catalog(catalog_x_gaia_movement, catalog_x_gaia_path, catalog, class_column=class_column,
+                                  id_column=id_column, save=save)
+
+
+def test_against_external_catalog(ext_catalog, ext_catalog_path, catalog, class_column='CLASS', id_column='ID', save=False):
+    is_in_ext = catalog[id_column].isin(ext_catalog[id_column])
+    catalogs_cross = catalog.loc[is_in_ext]
+    n_train_in_ext = sum(catalogs_cross['train']) if 'train' in catalogs_cross.columns else 0
 
     print('--------------------')
-    print(os.path.basename(qso_catalog_path))
-    print('QSO catalog x KiDS size: {}'.format(qso_catalog.shape[0]))
-    print('QSO catalog x KiDS catalog size: {}, train elements: {}'.format(sum(is_in_qso), n_train_in_qso))
-    print(describe_column(catalog.loc[is_in_qso, 'CLASS']))
+    print(os.path.basename(ext_catalog_path))
+    print('ext. catalog x base set size: {}'.format(ext_catalog.shape[0]))
+    print('ext. catalog x base catalog size: {}, train elements: {}'.format(sum(is_in_ext), n_train_in_ext))
+    print('catalogs cross:')
+    print(describe_column(catalogs_cross[class_column]))
+
+    if 'train' in catalogs_cross.columns:
+        catalogs_cross_no_train = catalogs_cross.loc[catalogs_cross['train'] == 0]
+        print('catalogs cross, no train:')
+        print(describe_column(catalogs_cross_no_train[class_column]))
+
+    title = os.path.basename(ext_catalog_path)[:-4]
+    plot_class_histograms(catalogs_cross, BAND_CALIB_COLUMNS, title=title)
 
     if save:
-        catalog.loc[is_in_qso].to_csv('catalogs_intersection/{}.csv'.format(os.path.basename(qso_catalog_path)))
+        catalog.loc[is_in_ext].to_csv('catalogs_intersection/{}.csv'.format(os.path.basename(ext_catalog_path)))
 
 
 def r_train_test_split(*args, train_val, test):
@@ -370,3 +397,31 @@ def normalize_map(map, map_normalization):
         if map_normalization[i] != 0:
             normalized[i] = map[i] / map_normalization[i]
     return normalized
+
+
+def get_kids_parts(objects):
+    objects_in_parts = [
+        objects.loc[(objects['GAL_LAT'] > 0) & ((objects['GAL_LONG'] > 300) | (objects['GAL_LONG'] < 100))],
+        objects.loc[(objects['GAL_LAT'] > 0) & (objects['GAL_LONG'] > 250) & (objects['GAL_LONG'] < 300)],
+        objects.loc[(objects['GAL_LAT'] > 0) & (objects['GAL_LONG'] > 100) & (objects['GAL_LONG'] < 250)],
+        objects.loc[(objects['GAL_LAT'] < 0) & (objects['GAL_LONG'] < 100)],
+        objects.loc[(objects['GAL_LAT'] < 0) & (objects['GAL_LONG'] > 100)],
+    ]
+    return objects_in_parts
+
+
+def show_correlations(maps_x, maps_y):
+    r_df, p_df, c_df = pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+    for map_x_name, map_x in maps_x:
+        for map_y_name, map_y in maps_y:
+            i_non_zero = np.nonzero(map_x)
+            r, p = scipy.stats.pearsonr(map_x[i_non_zero], map_y[i_non_zero])
+            c = np.corrcoef(map_x[i_non_zero], map_y[i_non_zero])[0][1]
+
+            r_df.loc[map_x_name, map_y_name] = r
+            p_df.loc[map_x_name, map_y_name] = p
+            c_df.loc[map_x_name, map_y_name] = c
+
+    display(r_df)
+    display(p_df)
+    display(c_df)
