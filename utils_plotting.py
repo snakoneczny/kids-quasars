@@ -1,3 +1,4 @@
+import os
 import itertools
 
 import scipy
@@ -7,14 +8,26 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import healpy as hp
 
+from utils import EXTERNAL_QSO_PATHS
+
+CUSTOM_COLORS = {
+    'QSO': (0.08605633600581403, 0.23824692404212, 0.30561236308077167),
+    'STAR': (0.7587183008012618, 0.7922069335474338, 0.9543861221913403),
+    'GALAXY': (0.32927729263408284, 0.4762845556584382, 0.1837155549758328),
+    'NONE SDSS': (0.8146245329198283, 0.49548316572322215, 0.5752525936416857),
+    'UNKNOWN': (0.6, 0.6, 0.6),
+    False: (0.8299576787894204, 0.5632024035248271, 0.7762744444444445),
+    True: (0.1700423212105796, 0.43679759647517286, 0.22372555555555548),
+}
+
 
 def plot_embedding(embedding, labels, label='class', is_continuous=False, alpha=0.5):
     if not is_continuous:
         labels_unique = np.unique(labels)
         n_colors = len(labels_unique)
-        color_palette = sns.color_palette('muted', n_colors)
+        color_palette = sns.color_palette('cubehelix', n_colors)
         color_palette = {labels_unique[k]: v for k, v in enumerate(color_palette)}
-        color_palette['UNKNOWN'] = (0.6, 0.6, 0.6)
+        color_palette.update(CUSTOM_COLORS)
 
         data = pd.DataFrame({'x': embedding[:, 0], 'y': embedding[:, 1], label: labels})
         sns.lmplot(x='x', y='y', hue=label, data=data, palette=color_palette, fit_reg=False,
@@ -99,23 +112,19 @@ def plot_map(hpxmap, unit='counts per pixel', is_cmap=True):
     hp.graticule()
 
 
-def plot_partial_map_stats(m, lat, map_stars=None, title=None):
+def plot_non_zero_map_stats(m, lat, map_stars=None, title=None):
     i_non_zero = np.nonzero(m)
     m_to_plot = m[i_non_zero]
     lat_to_plot = lat[i_non_zero]
     map_stars_to_plot = map_stars[i_non_zero] if map_stars is not None else None
 
-    plot_map_stats(m_to_plot, lat_to_plot, map_stars_to_plot, title)
+    plot_map_stats(m_to_plot, lat_to_plot, map_stars=map_stars_to_plot, title=title)
 
 
 def plot_map_stats(m, lat, map_stars=None, title=None, xlim=None):
     bins = 50
 
-    m_to_show = m[m > 0]
-    lat_to_show = lat[m > 0]
-    map_stars_to_show = map_stars[m > 0]
-
-    bin_means, bin_edges, bin_number = scipy.stats.binned_statistic(lat_to_show, m_to_show, statistic='mean', bins=bins)
+    bin_means, bin_edges, bin_number = scipy.stats.binned_statistic(lat, m, statistic='mean', bins=bins)
     # plt.bar(bin_edges[:-1], bin_means, bin_edges[1] - bin_edges[0], align='edge')
     # plt.hlines(bin_means, bin_edges[:-1], bin_edges[1:])
     plt.plot(bin_edges[:-1], bin_means)
@@ -126,7 +135,7 @@ def plot_map_stats(m, lat, map_stars=None, title=None, xlim=None):
 
     if map_stars is not None:
         plt.figure()
-        bin_means, bin_edges, bin_number = scipy.stats.binned_statistic(lat_to_show, map_stars_to_show, statistic='mean', bins=bins)
+        bin_means, bin_edges, bin_number = scipy.stats.binned_statistic(lat, map_stars, statistic='mean', bins=bins)
         # plt.bar(bin_edges[:-1], bin_means, bin_edges[1] - bin_edges[0], align='edge')
         # plt.hlines(bin_means, bin_edges[:-1], bin_edges[1:])
         plt.plot(bin_edges[:-1], bin_means, label='stars')
@@ -136,7 +145,32 @@ def plot_map_stats(m, lat, map_stars=None, title=None, xlim=None):
         plt.title('stars')
 
     plt.figure()
-    sns.distplot(m_to_show)
+    sns.distplot(m)
     plt.xlabel('pixel density')
     plt.ylabel('counts')
     plt.title(title)
+
+
+def plot_proba_against_size(data, column='QSO', x_lim=(0, 1), step=0.01):
+    thresholds = np.arange(x_lim[0], x_lim[1] + step, step)
+    data_size_arr = [data.loc[data[column] >= thr].shape[0] for thr in thresholds]
+
+    plt.plot(thresholds, data_size_arr)
+    plt.xlabel('{} probability threshold'.format(column))
+    plt.ylabel('{} size'.format(column))
+
+
+def plot_proba_against_qxternal_qso(data):
+    step = 0.01
+    thresholds = np.arange(0.3, 1.0 + step, step)
+
+    for external_path in EXTERNAL_QSO_PATHS:
+        external_qso = pd.read_csv(external_path, usecols=['ID'])
+        data_size_arr = [sum(data.loc[data['QSO'] >= thr]['ID'].isin(external_qso['ID'])) for thr in thresholds]
+
+        label = ' '.join(os.path.basename(external_path)[15:-4].split('.'))
+        plt.plot(thresholds, data_size_arr, label=label)
+        plt.xlabel('QSO probability threshold')
+        plt.ylabel('cross match size')
+
+    plt.legend()

@@ -8,6 +8,6 @@ clean_sdss: True
 
 model: rf
 
-features: colors-cstar
+features: no-mags
 
 cut: u-g
