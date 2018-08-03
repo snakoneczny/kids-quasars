@@ -296,12 +296,12 @@ def describe_column(data):
     return values, counts, contribution
 
 
-def print_feature_ranking(model, X):
+def print_feature_ranking(model, features):
     importances = model.feature_importances_
     indices = np.argsort(importances)[::-1]
     logger.info('feature ranking')
-    for f in range(X.shape[1]):
-        print('%d. feature %s (%f)' % (f + 1, X.columns[indices[f]], importances[indices[f]]))
+    for f in range(len(features)):
+        print('%d. feature %s (%f)' % (f + 1, features[indices[f]], importances[indices[f]]))
 
 
 def r_train_test_split(*args, train_val, test):
@@ -398,3 +398,19 @@ def show_correlations(maps_x, maps_y):
     display(p_df)
     print('correlation coefficient')
     display(c_df)
+
+
+def get_model_type(model_name):
+    if model_name[:8] == 'astronet':
+        return 'astronet'
+    else:
+        return model_name.split('_')[0]
+
+
+def get_estimation_type(model_name):
+    if model_name[:8] == 'astronet':
+        return 'astronet'
+    elif model_name[-3:] in ['clf', 'reg']:
+        return model_name[-3:]
+    else:
+        raise Exception('Unknown estimator type: {}'.format(model_name))

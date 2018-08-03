@@ -2,12 +2,12 @@ data_name: KiDS.DR3.x.SDSS.DR14
 
 catalog_name: KiDS.DR3.merged
 
-subset: star
+subset:
 
 clean_sdss: True
 
-model: rf_clf
+model: rf_reg
 
-features: no-mags
+features: all
 
-cut: u-g
+cut: r

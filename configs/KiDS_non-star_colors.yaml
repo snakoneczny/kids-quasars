@@ -6,7 +6,7 @@ subset: non-star
 
 clean_sdss: True
 
-model: rf
+model: rf_clf
 
 features: no-mags
 

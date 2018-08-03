@@ -2,7 +2,7 @@ data_name: KiDS.DR3.x.SDSS.DR14
 
 catalog_name: KiDS.DR3.merged
 
-subset:
+subset: star
 
 clean_sdss: True
 

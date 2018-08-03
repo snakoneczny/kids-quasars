@@ -13,8 +13,7 @@ from utils import BAND_CALIB_COLUMNS, describe_column, EXTERNAL_QSO_PATHS, clean
 
 def metric_class_split(y_true, y_pred, classes, metric):
     scores = []
-    for c in np.unique(classes):  # TODO: merge with encoder
-        print(c)
+    for c in np.unique(classes):
         c_idx = np.array((classes == c))
         scores.append(metric(y_true[c_idx], y_pred[c_idx]))
     return scores
