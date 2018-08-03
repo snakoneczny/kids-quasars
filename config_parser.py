@@ -1,21 +1,7 @@
 import yaml
 
-from sklearn.ensemble import RandomForestClassifier
-from xgboost import XGBClassifier
-
 from utils import FEATURES
-
-MODELS = {
-    'rf': RandomForestClassifier(
-        n_estimators=400, random_state=491237, criterion='entropy', n_jobs=8,
-        # class_weight={'QSO': 0.4, 'STAR': 0.4, 'GALAXY': 0.2}
-    ),
-    'xgb': XGBClassifier(
-        max_depth=7, learning_rate=0.1, n_estimators=200, objective='multi:softmax', booster='gbtree', n_jobs=8,
-        gamma=0, min_child_weight=1, max_delta_step=0, subsample=1, colsample_bytree=1, colsample_bylevel=1,
-        reg_alpha=0, reg_lambda=1, scale_pos_weight=1, base_score=0.5, random_state=18235, missing=None
-    ),
-}
+from models import MODEL_CONSTRUCTORS
 
 
 def parse_config(config_file):
@@ -24,11 +10,13 @@ def parse_config(config_file):
 
     cfg = add_experiment_name(cfg)
 
+    # Get features from a general feature subset name
     cfg['features'] = FEATURES[cfg['features']]
+    cfg['n_features'] = len(cfg['features'])
 
-    model = MODELS[cfg['model']]
+    model_constructor = MODEL_CONSTRUCTORS[cfg['model']]
 
-    return model, cfg
+    return model_constructor, cfg
 
 
 def add_experiment_name(cfg):
