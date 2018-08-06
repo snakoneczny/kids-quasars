@@ -33,7 +33,8 @@ parser = argparse.ArgumentParser()
 parser.add_argument('-c', '--config', dest='config', required=True, help='config file name')
 args = parser.parse_args()
 
-model, cfg = parse_config(args.config)
+model_constructor, cfg = parse_config(args.config)
+model = model_constructor(cfg)
 
 # Create data paths
 data_path_train = '/media/snakoneczny/data/KiDS/{data_name}.cols.csv'.format(data_name=cfg['data_name'])

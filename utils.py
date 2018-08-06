@@ -190,9 +190,9 @@ def clean_kids(data, with_print=True):
     if with_print: print('Removing errors bigger than 1: {} left'.format(mask.sum()))
 
     # Remove flags
-    for c in SE_FLAGS:
-        mask &= (data_no_na[c] == 0)
-    if with_print: print('Removing SExtractor flags: {} left'.format(mask.sum()))
+    # for c in SE_FLAGS:
+    #     mask &= (data_no_na[c] == 0)
+    # if with_print: print('Removing SExtractor flags: {} left'.format(mask.sum()))
 
     # Remove ima-flags
     flag_mask = 0b01111111
@@ -404,7 +404,7 @@ def get_model_type(model_name):
     if model_name[:8] == 'astronet':
         return 'astronet'
     else:
-        return model_name.split('_')[0]
+        return model_name.split('-')[0]
 
 
 def get_estimation_type(model_name):

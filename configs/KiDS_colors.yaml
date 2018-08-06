@@ -6,7 +6,7 @@ subset:
 
 clean_sdss: True
 
-model: rf_clf
+model: rf-clf
 
 features: no-mags
 

@@ -97,9 +97,9 @@ class AstroNet(BaseEstimator):
 
 
 MODEL_CONSTRUCTORS = {
-    'rf_clf': build_rf_clf,
-    'rf_reg': build_rf_reg,
-    'xgb_clf': build_xgb_clf,
-    'ann_clf': build_ann_clf,
+    'rf-clf': build_rf_clf,
+    'rf-reg': build_rf_reg,
+    'xgb-clf': build_xgb_clf,
+    'ann-clf': build_ann_clf,
     'astronet': build_astronet,
 }
