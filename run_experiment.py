@@ -194,9 +194,10 @@ if model_type in ['rf', 'xgb']:
 logger.info(validation_report)
 logger.info(test_report)
 
+# TODO: right now we save only validation predictions, but test should also be saved if we want to report test scores
 # Save predictions df
 if args.save:
-    predictions_path = 'experiments/{exp_name}__{timestamp}.csv'.format(exp_name=cfg['exp_name'],
+    predictions_path = 'outputs/experiments/{exp_name}__{timestamp}.csv'.format(exp_name=cfg['exp_name'],
                                                                         timestamp=timestamp_start)
     predictions_df.to_csv(predictions_path, index=False)
     logger.info('predictions saved to: {}'.format(predictions_path))

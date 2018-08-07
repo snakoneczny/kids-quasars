@@ -69,6 +69,6 @@ for data_chunk in tqdm(pd.read_csv(data_path_pred, chunksize=4000000), desc='Inf
 logger.info('catalog size: {}'.format(catalog_df.shape))
 
 # Save catalog
-catalog_path = 'catalogs/{exp_name}__{timestamp}.csv'.format(exp_name=cfg['exp_name'], timestamp=timestamp_start)
+catalog_path = 'outputs/catalogs/{exp_name}__{timestamp}.csv'.format(exp_name=cfg['exp_name'], timestamp=timestamp_start)
 catalog_df.to_csv(catalog_path, index=False)
 logger.info('catalog saved to: {}'.format(catalog_path))

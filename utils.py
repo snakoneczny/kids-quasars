@@ -15,6 +15,7 @@ EXTERNAL_QSO_PATHS = [
     '/media/snakoneczny/data/KiDS/KiDS.DR3.x.QSO.RICHARDS.2009.csv',
     '/media/snakoneczny/data/KiDS/KiDS.DR3.x.QSO.RICHARDS.2015.csv',
     '/media/snakoneczny/data/KiDS/KiDS.DR3.x.QSO.GALEX.csv',
+    '/media/snakoneczny/data/KiDS/KiDS.DR3.x.2QZ6QZ.cols.csv',
 ]
 
 BANDS = ['U', 'G', 'R', 'I']
@@ -414,3 +415,10 @@ def get_estimation_type(model_name):
         return model_name[-3:]
     else:
         raise Exception('Unknown estimator type: {}'.format(model_name))
+
+
+def process_2df(data):
+    data['id1'] = data['id1'].apply(lambda x: x.strip())
+    data['id1'] = data['id1'].apply(lambda x: x.upper())
+    data = data.replace('GAL', 'GALAXY')
+    return data

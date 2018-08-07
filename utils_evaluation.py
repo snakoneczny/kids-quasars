@@ -1,14 +1,146 @@
-import math
 import os
-from collections.__init__ import defaultdict
+from collections.__init__ import defaultdict, OrderedDict
 
-import numpy as np
-import pandas as pd
 import seaborn as sns
 from matplotlib import pyplot as plt
-from scipy import stats
+from sklearn.metrics import accuracy_score, f1_score, confusion_matrix, log_loss, roc_curve, auc, precision_score, \
+    recall_score, average_precision_score, precision_recall_curve
 
-from utils import BAND_CALIB_COLUMNS, describe_column, EXTERNAL_QSO_PATHS, clean_gaia
+from utils import *
+from utils_plotting import plot_confusion_matrix, plot_roc_curve, plot_precision_recall_curve
+
+
+def classification_report(predictions, col_true='CLASS'):
+    class_names = np.unique(predictions[col_true])
+    predictions['class_pred'] = predictions[class_names].idxmax(axis=1)
+
+    np.set_printoptions(precision=4)
+
+    multiclass_report(predictions, class_names, col_true=col_true)
+    binary_report(predictions, col_true=col_true)
+
+    if 'Z' in predictions.columns:
+        classification_z_report(predictions, col_true=col_true)
+
+
+def multiclass_report(predictions, class_names, col_true='CLASS'):
+    print('Multiclass classification results:')
+
+    y_true = predictions[col_true]
+    y_pred = predictions['class_pred']
+
+    acc = accuracy_score(y_true, y_pred)
+    print('Accuracy = {:.4f}'.format(acc))
+
+    f1 = f1_score(y_true, y_pred, average=None)
+    print('F1 per class = {}'.format(f1))
+
+    logloss = log_loss(y_true, predictions[['GALAXY', 'QSO', 'STAR']])
+    print('Logloss = {:.4f}'.format(logloss))
+
+    cnf_matrix = confusion_matrix(y_true, y_pred)
+    plt.figure()
+    plot_confusion_matrix(cnf_matrix, classes=class_names, title='Confusion matrix, without normalization')
+    plt.figure()
+    plot_confusion_matrix(cnf_matrix, classes=class_names, normalize=True, title='Normalized confusion matrix')
+    plt.show()
+
+
+def binary_report(predictions, col_true='CLASS'):
+    print('Binary classification results:')
+
+    y_true = (predictions[col_true] == 'QSO')
+    y_pred_proba = predictions['QSO']
+    y_pred_binary = (predictions['class_pred'] == 'QSO')
+
+    n_pos = y_pred_binary.sum()
+    n_all = len(y_pred_binary)
+    print('Predicted positives: {}/{} ({:.2f}%)'.format(n_pos, n_all, n_pos / n_all * 100))
+
+    logloss = log_loss(y_true, y_pred_proba)
+    print('logloss = {:.4f}'.format(logloss))
+
+    # ROC AUC
+    fpr, tpr, _ = roc_curve(y_true, y_pred_proba)
+    roc_auc = auc(fpr, tpr)
+    print('ROC AUC = {:.4f}'.format(roc_auc))
+    plot_roc_curve(fpr, tpr, roc_auc)
+
+    binary_metrics = OrderedDict([
+        ('accuracy', accuracy_score),
+        ('f1', f1_score),
+        ('precision', precision_score),
+        ('recall', recall_score),
+    ])
+    for metric_name, metric_func in binary_metrics.items():
+        metric_value = metric_func(y_true, y_pred_binary)
+        print('{} = {:.4f}'.format(metric_name, metric_value))
+
+    # Precision - recall curve
+    average_precision = average_precision_score(y_true, y_pred_proba)
+    precision, recall = precision_score(y_true, y_pred_binary), recall_score(y_true, y_pred_binary)
+    precisions, recalls, thresholds = precision_recall_curve(y_true, y_pred_proba)
+    plot_precision_recall_curve(precisions, recalls, average_precision, precision, recall)
+
+
+def classification_z_report(predictions, col_true='CLASS'):
+    qso_correct = (predictions[col_true] == 'QSO') & (predictions['class_pred'] == 'QSO')
+    qso_not_correct = (predictions[col_true] == 'QSO') & (predictions['class_pred'] != 'QSO')
+
+    other_correct = (predictions[col_true] != 'QSO') & (predictions['class_pred'] != 'QSO')
+    other_not_correct = (predictions[col_true] != 'QSO') & (predictions['class_pred'] == 'QSO')
+
+    ds_tp = predictions.loc[qso_correct, 'Z']
+    ds_fn = predictions.loc[qso_not_correct, 'Z']
+    _, bin_edges = np.histogram(np.hstack((ds_tp, ds_fn)), bins=40)
+
+    plt.figure()
+    sns.distplot(ds_tp, label='TP', bins=bin_edges, kde=False, rug=False, hist_kws={'alpha': 0.5})
+    sns.distplot(ds_fn, label='FN', bins=bin_edges, kde=False, rug=False, hist_kws={'alpha': 0.5})
+    plt.legend()
+
+    ds_tn = predictions.loc[other_correct, 'Z']
+    ds_fp = predictions.loc[other_not_correct, 'Z']
+    _, bin_edges = np.histogram(np.hstack((ds_tn, ds_fp)), bins=40)
+
+    plt.figure()
+    sns.distplot(ds_tn, label='TN', bins=bin_edges, kde=False, rug=False, hist_kws={'alpha': 0.5})
+    sns.distplot(ds_fp, label='FP', bins=bin_edges, kde=False, rug=False, hist_kws={'alpha': 0.5})
+    plt.legend()
+
+    # Binary part
+    bins = np.arange(0, math.ceil(predictions['Z'].max()), 1)
+    precision_arr, recall_arr, size_arr = [], [], []
+    for z_min in bins:
+        preds_binned = predictions.loc[(predictions['Z'] > z_min) & (predictions['Z'] < z_min + 1)]
+
+        y_true = (preds_binned[col_true] == 'QSO')
+        y_pred_binary = (preds_binned['class_pred'] == 'QSO')
+
+        precision_arr.append(precision_score(y_true, y_pred_binary))
+        recall_arr.append(recall_score(y_true, y_pred_binary))
+        size_arr.append(preds_binned.shape[0])
+
+    plt.figure()
+    plt.plot(bins, precision_arr, label='purity')
+    plt.plot(bins, recall_arr, label='completeness')
+    plt.legend()
+
+    plt.figure()
+    plt.plot(bins, size_arr, label='size')
+    plt.legend()
+
+
+def redshift_report(predictions):
+    predictions['residual'] = abs(predictions['Z'] - predictions['Z_pred'])
+    bins = np.arange(predictions['Z'].min(), predictions['Z'].max() + 0.5, 0.5)
+    predictions['binned'] = pd.cut(predictions['Z'], bins)
+
+    grouped = predictions.groupby(by='binned')
+
+    print(predictions['residual'].mean())
+    print(grouped.size())
+    print(grouped.mean()['residual'])
 
 
 def metric_class_split(y_true, y_pred, classes, metric):
@@ -48,7 +180,13 @@ def test_external_qso(catalog, save=False):
     print(describe_column(catalog['CLASS']))
 
     for external_path in EXTERNAL_QSO_PATHS:
-        external_catalog = pd.read_csv(external_path, usecols=['ID'])
+        external_catalog = pd.read_csv(external_path)
+
+        # Take only QSOs for 2QZ/6QZ
+        if 'id1' in external_catalog.columns:
+            external_catalog = process_2df(external_catalog)
+            external_catalog = external_catalog.loc[external_catalog['id1'] == 'QSO']
+
         title = os.path.basename(external_path)[:-4]
         test_against_external_catalog(external_catalog, catalog, title=title, save=save)
 
