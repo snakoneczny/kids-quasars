@@ -151,16 +151,67 @@ def metric_class_split(y_true, y_pred, classes, metric):
     return scores
 
 
-def number_count_analysis(ds, c=10, linear_range=(18, 20)):
+def number_counts(data, x_lim=None, title=None, legend_loc='upper left'):
+    # Get x limit from all magnitudes
+    if x_lim is None:
+        m_min = int(math.floor(data[BAND_CALIB_COLUMNS].values.min()))
+        m_max = int(math.ceil(data[BAND_CALIB_COLUMNS].values.max()))
+        bins = np.arange(m_min, m_max + 1.0, 1.0)
+    else:
+        bins = np.arange(x_lim[0], x_lim[1] + 1.0, 1.0)
+
+    bin_titles = ['({}, {}]'.format(bins[i], bins[i + 1]) for i, _ in enumerate(bins[:-1])]
+
+    # Plot for every magnitude
+    counts = pd.DataFrame()
+    for band in BAND_CALIB_COLUMNS:
+
+        # Bin magnitudes
+        data['bin'] = pd.cut(data[band], bins, labels=False)
+
+        # For each bin
+        for i in range(len(bins) - 1):
+            data_bin = data.loc[data['bin'] == i]
+            counts = counts.append({'objects': data_bin.shape[0], 'magnitude range': bin_titles[i], 'magnitude': band},
+                                   ignore_index=True)
+
+    sns.catplot(x='magnitude range', y='objects', hue='magnitude', data=counts, kind='bar',
+                aspect=1.7, height=5, legend_out=False, palette='cubehelix')
+    plt.legend(loc=legend_loc)
+    plt.yscale('log')
+    plt.title(title)
+
+
+def number_counts_multidata(data_dict, x_lim, band=MAG_GAAP_CALIB_R, title=None, legend_loc='upper left'):
+    bins = np.arange(x_lim[0], x_lim[1] + 1.0, 1.0)
+    bin_titles = ['({}, {}]'.format(bins[i], bins[i + 1]) for i, _ in enumerate(bins[:-1])]
+
+    counts = pd.DataFrame()
+    for data_name, data in data_dict.items():
+        data['bin'] = pd.cut(data[band], bins, labels=False)
+
+        # For each bin
+        for i in range(len(bins) - 1):
+            data_bin = data.loc[data['bin'] == i]
+            counts = counts.append({'objects': data_bin.shape[0], band: bin_titles[i], 'dataset': data_name},
+                                   ignore_index=True)
+
+    sns.catplot(x=band, y='objects', hue='dataset', data=counts, kind='bar',
+                aspect=1.6, height=5, legend_out=False, palette='cubehelix')
+    plt.legend(loc=legend_loc)
+    plt.yscale('log')
+
+
+def number_counts_linear(data, c=10, linear_range=(18, 20)):
     for b in BAND_CALIB_COLUMNS:
 
-        m_min = int(math.ceil(ds[b].min()) + 1)
-        m_max = int(math.ceil(ds[b].max()) - 1)
+        m_min = int(math.ceil(data[b].min()))
+        m_max = int(math.ceil(data[b].max()))
 
         x, y = [], []
         for m in range(m_min, m_max + 1):
             x.append(m)
-            v = ds.loc[ds[b] < m].shape[0]
+            v = data.loc[data[b] < m].shape[0]
             if v != 0:
                 v = math.log(v, 10)
             y.append(v)
@@ -173,6 +224,47 @@ def number_count_analysis(ds, c=10, linear_range=(18, 20)):
     plt.xlabel('m')
     plt.ylabel('log N(≤ m)')
     plt.legend()
+
+
+# nside 58 gives 1.02 sq. deg.
+def number_counts_pixels(data, nside=58, x_lim=None, title=None, legend_loc='upper left'):
+    # Get mask for the whole dataset
+    map, _, _ = get_map(data['RAJ2000'], data['DECJ2000'], nside=nside)
+    mask_non_zero = np.nonzero(map)
+
+    # Get x limit from all magnitudes
+    if x_lim is None:
+        m_min = int(math.floor(data[BAND_CALIB_COLUMNS].values.min()))
+        m_max = int(math.ceil(data[BAND_CALIB_COLUMNS].values.max()))
+        bins = np.arange(m_min, m_max + 1.0, 1.0)
+    else:
+        bins = np.arange(x_lim[0], x_lim[1] + 1.0, 1.0)
+
+    bin_titles = ['({}, {}]'.format(bins[i], bins[i + 1]) for i, _ in enumerate(bins[:-1])]
+
+    # Plot for every magnitude
+    pixel_densities = pd.DataFrame()
+    for band in BAND_CALIB_COLUMNS:
+
+        # Bin magnitudes
+        data['bin'] = pd.cut(data[band], bins, labels=False)
+
+        # For each bin
+        for i in range(len(bins) - 1):
+            data_bin = data.loc[data['bin'] == i]
+
+            # Get map
+            map, _, _ = get_map(data_bin['RAJ2000'], data_bin['DECJ2000'], nside=nside)
+            map_masked = map[mask_non_zero]
+            pixel_densities = pixel_densities.append(
+                pd.DataFrame({'pixel density': map_masked, 'magnitude range': bin_titles[i], 'magnitude': band}),
+                ignore_index=True)
+
+    sns.catplot(x='magnitude range', y='pixel density', hue='magnitude', data=pixel_densities, kind='bar',
+                aspect=1.7, height=5, legend_out=False, palette='cubehelix')
+    plt.legend(loc=legend_loc)
+    plt.yscale('log')
+    plt.title(title)
 
 
 def test_external_qso(catalog, save=False):

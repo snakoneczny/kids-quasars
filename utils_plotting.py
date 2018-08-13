@@ -97,11 +97,11 @@ def plot_precision_recall_curve(precisions, recalls, average_precision, precisio
     plt.title('Precision-Recall curve: AP={0:0.2f}'.format(average_precision))
 
 
-def plot_class_histograms(data, columns, title=None):
+def plot_class_histograms(data, columns, class_column='CLASS', title=None):
     for c in columns:
         plt.figure()
         for t in ['STAR', 'GALAXY', 'QSO']:
-            sns.distplot(data.loc[data['CLASS'] == t][c], label=t, kde=False, rug=False, hist_kws={'alpha': 0.5})
+            sns.distplot(data.loc[data[class_column] == t][c], label=t, kde=False, rug=False, hist_kws={'alpha': 0.5})
             plt.title(title)
         plt.legend()
 

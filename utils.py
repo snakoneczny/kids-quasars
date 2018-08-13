@@ -91,7 +91,7 @@ COLOR_PAIRS = [
     (COLOR_GAAPHOM_U_G, COLOR_GAAPHOM_R_I),
 ]
 
-SE_FLAGS = ['FLAG_U', 'FLAG_G', 'FLAG_R', 'FLAG_I']
+FLAGS = ['FLAG_U', 'FLAG_G', 'FLAG_R', 'FLAG_I']
 IMA_FLAGS = ['IMAFLAGS_ISO_U', 'IMAFLAGS_ISO_G', 'IMAFLAGS_ISO_R', 'IMAFLAGS_ISO_I']
 
 FEATURES = {
@@ -191,15 +191,15 @@ def clean_kids(data, with_print=True):
     if with_print: print('Removing errors bigger than 1: {} left'.format(mask.sum()))
 
     # Remove flags
-    # for c in SE_FLAGS:
+    # for c in FLAGS:
     #     mask &= (data_no_na[c] == 0)
-    # if with_print: print('Removing SExtractor flags: {} left'.format(mask.sum()))
+    # if with_print: print('Removing flags: {} left'.format(mask.sum()))
 
     # Remove ima-flags
     flag_mask = 0b01111111
     for c in IMA_FLAGS:
         mask &= (data_no_na[c] & flag_mask == 0)
-    if with_print: print('Removing KiDS flags: {} left'.format(mask.sum()))
+    if with_print: print('Removing IMA flags: {} left'.format(mask.sum()))
 
     # Tile flag
     # mask &= (data_no_na['TILE_FLAG'] == 0)
