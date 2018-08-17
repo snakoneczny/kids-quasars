@@ -10,7 +10,7 @@ from utils import *
 from utils_plotting import plot_confusion_matrix, plot_roc_curve, plot_precision_recall_curve
 
 
-def classification_report(predictions, col_true='CLASS'):
+def classification_report(predictions, col_true='CLASS', z_max=None):
     class_names = np.unique(predictions[col_true])
     predictions['class_pred'] = predictions[class_names].idxmax(axis=1)
 
@@ -20,7 +20,7 @@ def classification_report(predictions, col_true='CLASS'):
     binary_report(predictions, col_true=col_true)
 
     if 'Z' in predictions.columns:
-        classification_z_report(predictions, col_true=col_true)
+        classification_z_report(predictions, col_true=col_true, z_max=z_max)
 
 
 def multiclass_report(predictions, class_names, col_true='CLASS'):
@@ -83,52 +83,24 @@ def binary_report(predictions, col_true='CLASS'):
     plot_precision_recall_curve(precisions, recalls, average_precision, precision, recall)
 
 
-def classification_z_report(predictions, col_true='CLASS'):
-    qso_correct = (predictions[col_true] == 'QSO') & (predictions['class_pred'] == 'QSO')
-    qso_not_correct = (predictions[col_true] == 'QSO') & (predictions['class_pred'] != 'QSO')
+def classification_z_report(predictions, col_true='CLASS', z_max=None):
+    predictions_zlim = predictions.loc[predictions['Z'] <= z_max]
 
-    other_correct = (predictions[col_true] != 'QSO') & (predictions['class_pred'] != 'QSO')
-    other_not_correct = (predictions[col_true] != 'QSO') & (predictions['class_pred'] == 'QSO')
+    for class_true in BASE_CLASSES:
 
-    ds_tp = predictions.loc[qso_correct, 'Z']
-    ds_fn = predictions.loc[qso_not_correct, 'Z']
-    _, bin_edges = np.histogram(np.hstack((ds_tp, ds_fn)), bins=40)
+        true_class_as_dict = {}
+        for class_pred in BASE_CLASSES:
+            true_class_as_dict[class_pred] = predictions_zlim.loc[
+                (predictions_zlim[col_true] == class_true) & (predictions_zlim['class_pred'] == class_pred)]['Z']
 
-    plt.figure()
-    sns.distplot(ds_tp, label='TP', bins=bin_edges, kde=False, rug=False, hist_kws={'alpha': 0.5})
-    sns.distplot(ds_fn, label='FN', bins=bin_edges, kde=False, rug=False, hist_kws={'alpha': 0.5})
-    plt.legend()
-
-    ds_tn = predictions.loc[other_correct, 'Z']
-    ds_fp = predictions.loc[other_not_correct, 'Z']
-    _, bin_edges = np.histogram(np.hstack((ds_tn, ds_fp)), bins=40)
-
-    plt.figure()
-    sns.distplot(ds_tn, label='TN', bins=bin_edges, kde=False, rug=False, hist_kws={'alpha': 0.5})
-    sns.distplot(ds_fp, label='FP', bins=bin_edges, kde=False, rug=False, hist_kws={'alpha': 0.5})
-    plt.legend()
-
-    # Binary part
-    bins = np.arange(0, math.ceil(predictions['Z'].max()), 1)
-    precision_arr, recall_arr, size_arr = [], [], []
-    for z_min in bins:
-        preds_binned = predictions.loc[(predictions['Z'] > z_min) & (predictions['Z'] < z_min + 1)]
-
-        y_true = (preds_binned[col_true] == 'QSO')
-        y_pred_binary = (preds_binned['class_pred'] == 'QSO')
-
-        precision_arr.append(precision_score(y_true, y_pred_binary))
-        recall_arr.append(recall_score(y_true, y_pred_binary))
-        size_arr.append(preds_binned.shape[0])
-
-    plt.figure()
-    plt.plot(bins, precision_arr, label='purity')
-    plt.plot(bins, recall_arr, label='completeness')
-    plt.legend()
-
-    plt.figure()
-    plt.plot(bins, size_arr, label='size')
-    plt.legend()
+        plt.figure()
+        _, bin_edges = np.histogram(np.hstack((true_class_as_dict['QSO'], true_class_as_dict['STAR'], true_class_as_dict['GALAXY'])), bins=40)
+        color_palette = sns.color_palette('cubehelix', len(BASE_CLASSES))
+        for i, class_pred in enumerate(BASE_CLASSES):
+            sns.distplot(true_class_as_dict[class_pred], label='{} clf. as {}'.format(class_true, class_pred), bins=bin_edges, kde=False,
+                         rug=False, color=color_palette[i], hist_kws={'alpha': 0.5, 'histtype': 'step', 'linewidth': 1})
+        plt.xlabel('z')
+        plt.legend(loc='upper left')
 
 
 def redshift_report(predictions):
@@ -182,7 +154,7 @@ def number_counts(data, x_lim=None, title=None, legend_loc='upper left'):
     plt.title(title)
 
 
-def number_counts_multidata(data_dict, x_lim, band=MAG_GAAP_CALIB_R, title=None, legend_loc='upper left'):
+def number_counts_multidata(data_dict, x_lim, band=MAG_GAAP_CALIB_R, legend_loc='upper left'):
     bins = np.arange(x_lim[0], x_lim[1] + 1.0, 1.0)
     bin_titles = ['({}, {}]'.format(bins[i], bins[i + 1]) for i, _ in enumerate(bins[:-1])]
 
@@ -321,7 +293,7 @@ def test_against_external_catalog(ext_catalog, catalog, class_column='CLASS', id
             plt.figure()
             for t in ['STAR', 'GALAXY', 'QSO']:
                 sns.distplot(catalogs_cross.loc[catalogs_cross['CLASS'] == t][c], label=t, kde=False, rug=False,
-                             hist_kws={'alpha': 0.5})
+                             hist_kws={'alpha': 0.5, 'histtype': 'step'})
                 plt.title(title)
             plt.legend()
 
@@ -385,12 +357,13 @@ def proba_motion_analysis(data_x_gaia, motions=['parallax'], x_lim=(0.3, 1), ste
 
     # Plot statistics
     to_plot = [(mu_dict, 'mu'), (sigma_dict, 'sigma'), (median_dict, 'median')]
+    color_palette = sns.color_palette('cubehelix', 2)
 
     for t in to_plot:
         plt.figure()
 
-        for motion in motions:
-            plt.plot(thresholds, t[0][motion], label=motion)
+        for i, motion in enumerate(motions):
+            plt.plot(thresholds, t[0][motion], label=motion, color=color_palette[i])
             plt.xlabel('probability threshold')
             plt.ylabel(t[1])
 

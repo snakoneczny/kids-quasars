@@ -1,5 +1,6 @@
 import os
 import itertools
+from collections import OrderedDict
 
 import scipy
 import numpy as np
@@ -8,13 +9,13 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import healpy as hp
 
-from utils import EXTERNAL_QSO_PATHS
+from utils import EXTERNAL_QSO_DICT, BAND_CALIB_COLUMNS, process_2df
 
 CUSTOM_COLORS = {
     'QSO': (0.08605633600581403, 0.23824692404212, 0.30561236308077167),
     'STAR': (0.7587183008012618, 0.7922069335474338, 0.9543861221913403),
     'GALAXY': (0.32927729263408284, 0.4762845556584382, 0.1837155549758328),
-    'NONE SDSS': (0.8146245329198283, 0.49548316572322215, 0.5752525936416857),
+    'not SDSS': (0.8146245329198283, 0.49548316572322215, 0.5752525936416857),
     'UNKNOWN': (0.6, 0.6, 0.6),
     False: (0.8299576787894204, 0.5632024035248271, 0.7762744444444445),
     True: (0.1700423212105796, 0.43679759647517286, 0.22372555555555548),
@@ -42,8 +43,7 @@ def plot_embedding(embedding, labels, label='class', is_continuous=False, alpha=
 
 def plot_confusion_matrix(cm, classes,
                           normalize=False,
-                          title='Confusion matrix',
-                          cmap=plt.cm.Blues):
+                          title='Confusion matrix'):
     """
     This function prints and plots the confusion matrix.
     Normalization can be applied by setting `normalize=True`.
@@ -51,6 +51,7 @@ def plot_confusion_matrix(cm, classes,
     if normalize:
         cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
 
+    cmap = sns.cubehelix_palette(light=.95, as_cmap=True)
     plt.imshow(cm, interpolation='nearest', cmap=cmap)
     plt.title(title)
     plt.colorbar()
@@ -97,12 +98,23 @@ def plot_precision_recall_curve(precisions, recalls, average_precision, precisio
     plt.title('Precision-Recall curve: AP={0:0.2f}'.format(average_precision))
 
 
+def plot_histograms(data_dict, columns=BAND_CALIB_COLUMNS, title=None):
+    color_palette = sns.color_palette('cubehelix', len(data_dict))
+    for column in columns:
+        plt.figure()
+        for i, (data_name, data) in enumerate(data_dict.items()):
+            sns.distplot(data[column], label=data_name, kde=False, rug=False, norm_hist=True, color=color_palette[i],
+                         hist_kws={'alpha': 0.5, 'histtype': 'step'})
+        if title: plt.title(title)
+        plt.legend()
+
+
 def plot_class_histograms(data, columns, class_column='CLASS', title=None):
     for c in columns:
         plt.figure()
         for t in ['STAR', 'GALAXY', 'QSO']:
             sns.distplot(data.loc[data[class_column] == t][c], label=t, kde=False, rug=False, hist_kws={'alpha': 0.5})
-            plt.title(title)
+        plt.title(title)
         plt.legend()
 
 
@@ -163,13 +175,24 @@ def plot_proba_against_size(data, column='QSO', x_lim=(0, 1), step=0.01):
 def plot_proba_against_qxternal_qso(data):
     step = 0.01
     thresholds = np.arange(0.3, 1.0 + step, step)
+    color_palette = sns.color_palette('cubehelix', len(EXTERNAL_QSO_DICT))
 
-    for external_path in EXTERNAL_QSO_PATHS:
-        external_qso = pd.read_csv(external_path, usecols=['ID'])
+    # Read data
+    data_dict = OrderedDict(
+        (data_name, pd.read_csv(data_path)) for data_name, data_path in EXTERNAL_QSO_DICT.items())
+
+    # Take only QSOs for 2QZ/6QZ
+    data_tmp = process_2df(data_dict['x 2QZ/6QZ'])
+    data_dict['x 2QZ/6QZ'] = data_tmp.loc[data_tmp['id1'] == 'QSO']
+
+    for i, (external_qso_name, external_qso) in enumerate(data_dict.items()):
         data_size_arr = [sum(data.loc[data['QSO'] >= thr]['ID'].isin(external_qso['ID'])) for thr in thresholds]
 
-        label = ' '.join(os.path.basename(external_path)[15:-4].split('.'))
-        plt.plot(thresholds, data_size_arr, label=label)
+        # TODO: Ugly work around
+        if external_qso_name == 'x 2QZ/6QZ':
+            external_qso_name += ' quasars'
+
+        plt.plot(thresholds, data_size_arr, label=external_qso_name, color=color_palette[i])
         plt.xlabel('QSO probability threshold')
         plt.ylabel('cross match size')
 

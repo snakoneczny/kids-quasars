@@ -31,6 +31,7 @@ timestamp_start = datetime.datetime.now().strftime('%Y-%m-%d_%H:%M:%S')
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-c', '--config', dest='config', required=True, help='config file name')
+parser.add_argument('-s', '--save', dest='save', action='store_true', help='flag for catalog saving')
 args = parser.parse_args()
 
 model_constructor, cfg = parse_config(args.config)
@@ -69,6 +70,7 @@ for data_chunk in tqdm(pd.read_csv(data_path_pred, chunksize=4000000), desc='Inf
 logger.info('catalog size: {}'.format(catalog_df.shape))
 
 # Save catalog
-catalog_path = 'outputs/catalogs/{exp_name}__{timestamp}.csv'.format(exp_name=cfg['exp_name'], timestamp=timestamp_start)
-catalog_df.to_csv(catalog_path, index=False)
-logger.info('catalog saved to: {}'.format(catalog_path))
+if args.save:
+    catalog_path = 'outputs/catalogs/{exp_name}__{timestamp}.csv'.format(exp_name=cfg['exp_name'], timestamp=timestamp_start)
+    catalog_df.to_csv(catalog_path, index=False)
+    logger.info('catalog saved to: {}'.format(catalog_path))

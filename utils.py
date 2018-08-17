@@ -1,6 +1,7 @@
 import random
 import logging
 import math
+from collections import OrderedDict
 
 import scipy
 import numpy as np
@@ -12,11 +13,15 @@ logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s', datefmt='%d
 logger = logging.getLogger(__name__)
 
 EXTERNAL_QSO_PATHS = [
+    '/media/snakoneczny/data/KiDS/KiDS.DR3.x.2QZ6QZ.cols.csv',
     '/media/snakoneczny/data/KiDS/KiDS.DR3.x.QSO.RICHARDS.2009.csv',
     '/media/snakoneczny/data/KiDS/KiDS.DR3.x.QSO.RICHARDS.2015.csv',
     '/media/snakoneczny/data/KiDS/KiDS.DR3.x.QSO.GALEX.csv',
-    '/media/snakoneczny/data/KiDS/KiDS.DR3.x.2QZ6QZ.cols.csv',
 ]
+
+EXTERNAL_QSO_DICT = OrderedDict(zip(['x 2QZ/6QZ', 'x Richards 2009', 'x Richards 2015', 'x DiPompeo 2015'], EXTERNAL_QSO_PATHS))
+
+BASE_CLASSES = ['QSO', 'STAR', 'GALAXY']
 
 BANDS = ['U', 'G', 'R', 'I']
 
