@@ -1,5 +1,5 @@
 import os
-from collections.__init__ import defaultdict, OrderedDict
+from collections.__init__ import defaultdict
 
 import seaborn as sns
 from matplotlib import pyplot as plt
@@ -323,7 +323,7 @@ def gaia_motion_analysis(data, norm=True):
             median_df.loc[class_name, motion] = median
 
             plt.figure()
-            sns.distplot(data_of_interest)
+            sns.distplot(data_of_interest, kde_kws=dict(bw=0.5))
             plt.ylabel(class_name)
 
     print('Mean:')

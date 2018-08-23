@@ -69,6 +69,7 @@ for data_chunk in tqdm(pd.read_csv(data_path_pred, chunksize=4000000), desc='Inf
 
 logger.info('catalog size: {}'.format(catalog_df.shape))
 
+# TODO: make sure galactic coordinates are being saved as well
 # Save catalog
 if args.save:
     catalog_path = 'outputs/catalogs/{exp_name}__{timestamp}.csv'.format(exp_name=cfg['exp_name'], timestamp=timestamp_start)
