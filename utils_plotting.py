@@ -1,4 +1,3 @@
-import os
 import itertools
 from collections import OrderedDict
 
@@ -7,9 +6,8 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-import healpy as hp
 
-from utils import EXTERNAL_QSO_DICT, BAND_CALIB_COLUMNS, process_2df
+from utils import BASE_CLASSES, EXTERNAL_QSO_DICT, BAND_CALIB_COLUMNS, process_2df
 
 CUSTOM_COLORS = {
     'QSO': (0.08605633600581403, 0.23824692404212, 0.30561236308077167),
@@ -21,14 +19,31 @@ CUSTOM_COLORS = {
     True: (0.1700423212105796, 0.43679759647517286, 0.22372555555555548),
 }
 
+LINE_STYLES = ['-', '--', '-.', ':']
 
-def plot_embedding(embedding, labels, label='class', is_continuous=False, alpha=0.5):
+
+def get_line_style(i):
+    return LINE_STYLES[i % len(LINE_STYLES)]
+
+
+def get_cubehelix_palette(n):
+    n_color = 2 if n == 1 else n
+    palette = sns.color_palette('cubehelix', n_color)
+    palette.reverse()
+    if n == 1:
+        return palette[1:]
+    else:
+        return palette
+
+
+def plot_embedding(embedding, labels, label='class', is_continuous=False, alpha=0.5, color_palette='cubehelix',
+                   with_custom_colors=True):
     if not is_continuous:
         labels_unique = np.unique(labels)
         n_colors = len(labels_unique)
-        color_palette = sns.color_palette('cubehelix', n_colors)
+        color_palette = sns.color_palette(color_palette, n_colors)
         color_palette = {labels_unique[k]: v for k, v in enumerate(color_palette)}
-        color_palette.update(CUSTOM_COLORS)
+        if with_custom_colors: color_palette.update(CUSTOM_COLORS)
 
         data = pd.DataFrame({'x': embedding[:, 0], 'y': embedding[:, 1], label: labels})
         sns.lmplot(x='x', y='y', hue=label, data=data, palette=color_palette, fit_reg=False,
@@ -98,23 +113,35 @@ def plot_precision_recall_curve(precisions, recalls, average_precision, precisio
     plt.title('Precision-Recall curve: AP={0:0.2f}'.format(average_precision))
 
 
-def plot_histograms(data_dict, columns=BAND_CALIB_COLUMNS, title=None):
-    color_palette = sns.color_palette('cubehelix', len(data_dict))
+def plot_histograms(data_dict, columns=BAND_CALIB_COLUMNS, x_lim_dict=None, title=None, pretty_print_function=None,
+                    legend_loc='upper left', legend_size=None):
+    color_palette = get_cubehelix_palette(len(data_dict))
     for column in columns:
+
         plt.figure()
-        for i, (data_name, data) in enumerate(data_dict.items()):
-            sns.distplot(data[column], label=data_name, kde=False, rug=False, norm_hist=True, color=color_palette[i],
-                         hist_kws={'alpha': 0.5, 'histtype': 'step'})
+        for i, (label, data) in enumerate(data_dict.items()):
+            sns.distplot(data[column], label=label, kde=False, rug=False, norm_hist=True, color=color_palette[i],
+                         hist_kws={'alpha': 0.5, 'histtype': 'step', 'linewidth': 1.5, 'linestyle': get_line_style(i)})
+
+        if x_lim_dict and column in x_lim_dict:
+            plt.xlim(x_lim_dict[column][0], x_lim_dict[column][1])
+
         if title: plt.title(title)
-        plt.legend()
+        if pretty_print_function: plt.xlabel(pretty_print_function(column))
+        plt.ylabel('normalized counts')
+        prop = {'size': legend_size} if legend_size else {}
+        plt.legend(loc=legend_loc, prop=prop)
 
 
-def plot_class_histograms(data, columns, class_column='CLASS', title=None):
+def plot_class_histograms(data, columns, class_column='CLASS', title=None, log_y=False):
+    color_palette = sns.color_palette('cubehelix', len(BASE_CLASSES))
     for c in columns:
         plt.figure()
-        for t in ['STAR', 'GALAXY', 'QSO']:
-            sns.distplot(data.loc[data[class_column] == t][c], label=t, kde=False, rug=False, hist_kws={'alpha': 0.5})
-        plt.title(title)
+        for i, t in enumerate(BASE_CLASSES):
+            sns.distplot(data.loc[data[class_column] == t][c], label=t, kde=False, rug=False, color=color_palette[i],
+                         hist_kws={'alpha': 0.5, 'histtype': 'step'})
+        if log_y: plt.yscale('log')
+        if title: plt.title(title)
         plt.legend()
 
 
@@ -175,7 +202,7 @@ def plot_proba_against_size(data, column='QSO', x_lim=(0, 1), step=0.01):
 def plot_proba_against_qxternal_qso(data):
     step = 0.01
     thresholds = np.arange(0.3, 1.0 + step, step)
-    color_palette = sns.color_palette('cubehelix', len(EXTERNAL_QSO_DICT))
+    color_palette = get_cubehelix_palette(len(EXTERNAL_QSO_DICT))
 
     # Read data
     data_dict = OrderedDict(
@@ -192,7 +219,8 @@ def plot_proba_against_qxternal_qso(data):
         if external_qso_name == 'x 2QZ/6QZ':
             external_qso_name += ' quasars'
 
-        plt.plot(thresholds, data_size_arr, label=external_qso_name, color=color_palette[i])
+        plt.plot(thresholds, data_size_arr, label=external_qso_name, linestyle=get_line_style(i),
+                 color=color_palette[i])
         plt.xlabel('QSO probability threshold')
         plt.ylabel('cross match size')
 

@@ -7,7 +7,8 @@ from sklearn.metrics import accuracy_score, f1_score, confusion_matrix, log_loss
     recall_score, average_precision_score, precision_recall_curve
 
 from utils import *
-from utils_plotting import plot_confusion_matrix, plot_roc_curve, plot_precision_recall_curve
+from utils_plotting import plot_confusion_matrix, plot_roc_curve, plot_precision_recall_curve, get_line_style, \
+    get_cubehelix_palette
 
 
 def classification_report(predictions, col_true='CLASS', z_max=None):
@@ -94,12 +95,15 @@ def classification_z_report(predictions, col_true='CLASS', z_max=None):
                 (predictions_zlim[col_true] == class_true) & (predictions_zlim['class_pred'] == class_pred)]['Z']
 
         plt.figure()
-        _, bin_edges = np.histogram(np.hstack((true_class_as_dict['QSO'], true_class_as_dict['STAR'], true_class_as_dict['GALAXY'])), bins=40)
-        color_palette = sns.color_palette('cubehelix', len(BASE_CLASSES))
+        _, bin_edges = np.histogram(
+            np.hstack((true_class_as_dict['QSO'], true_class_as_dict['STAR'], true_class_as_dict['GALAXY'])), bins=40)
+        color_palette = get_cubehelix_palette(len(BASE_CLASSES))
         for i, class_pred in enumerate(BASE_CLASSES):
-            sns.distplot(true_class_as_dict[class_pred], label='{} clf. as {}'.format(class_true, class_pred), bins=bin_edges, kde=False,
-                         rug=False, color=color_palette[i], hist_kws={'alpha': 0.5, 'histtype': 'step', 'linewidth': 1})
+            sns.distplot(true_class_as_dict[class_pred], label='{} clf. as {}'.format(class_true, class_pred),
+                         bins=bin_edges, kde=False, rug=False, color=color_palette[i],
+                         hist_kws={'alpha': 0.5, 'histtype': 'step', 'linewidth': 1.5, 'linestyle': get_line_style(i)})
         plt.xlabel('z')
+        plt.ylabel('counts')
         plt.legend(loc='upper left')
 
 
@@ -323,7 +327,9 @@ def gaia_motion_analysis(data, norm=True):
             median_df.loc[class_name, motion] = median
 
             plt.figure()
-            sns.distplot(data_of_interest, kde_kws=dict(bw=0.5))
+            sns.distplot(data_of_interest, color=get_cubehelix_palette(1)[0], kde_kws=dict(bw=0.5))
+            if motion == 'parallax_norm':
+                plt.xlim((-6, 6))
             plt.ylabel(class_name)
 
     print('Mean:')
@@ -357,13 +363,13 @@ def proba_motion_analysis(data_x_gaia, motions=['parallax'], x_lim=(0.3, 1), ste
 
     # Plot statistics
     to_plot = [(mu_dict, 'mu'), (sigma_dict, 'sigma'), (median_dict, 'median')]
-    color_palette = sns.color_palette('cubehelix', 2)
+    color_palette = get_cubehelix_palette(len(motions))
 
     for t in to_plot:
         plt.figure()
 
         for i, motion in enumerate(motions):
-            plt.plot(thresholds, t[0][motion], label=motion, color=color_palette[i])
+            plt.plot(thresholds, t[0][motion], label=motion, color=color_palette[i], linestyle=get_line_style(i))
             plt.xlabel('probability threshold')
             plt.ylabel(t[1])
 

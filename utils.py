@@ -6,7 +6,6 @@ from collections import OrderedDict
 import scipy
 import numpy as np
 import pandas as pd
-import healpy as hp
 from scipy import stats
 
 logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s', datefmt='%d/%m/%Y %H:%M:%S', level=logging.INFO)
@@ -19,7 +18,8 @@ EXTERNAL_QSO_PATHS = [
     '/media/snakoneczny/data/KiDS/KiDS.DR3.x.QSO.GALEX.csv',
 ]
 
-EXTERNAL_QSO_DICT = OrderedDict(zip(['x 2QZ/6QZ', 'x Richards 2009', 'x Richards 2015', 'x DiPompeo 2015'], EXTERNAL_QSO_PATHS))
+EXTERNAL_QSO_DICT = OrderedDict(
+    zip(['x 2QZ/6QZ', 'x Richards 2009', 'x Richards 2015', 'x DiPompeo 2015'], EXTERNAL_QSO_PATHS))
 
 BASE_CLASSES = ['QSO', 'STAR', 'GALAXY']
 
@@ -177,9 +177,20 @@ def get_subset(data, subset, with_print=True):
 def clean_kids(data, with_print=True):
     # Drop NANs
     data_no_na = data.dropna(subset=[MAG_GAAP_U, MAG_GAAP_G, MAG_GAAP_R, MAG_GAAP_I]).reset_index(drop=True)
-    if with_print: print('Droping NANs: {} left'.format(data_no_na.shape[0]))
+    if with_print:
+        n_left = data_no_na.shape[0]
+        p_left = data_no_na.shape[0] / data.shape[0] * 100
+        print('Droping NANs: {} ({:.2f}%) left'.format(n_left, p_left))
 
     mask = [1] * data_no_na.shape[0]
+
+    # Remove errors
+    for b in BANDS:
+        mask &= (data_no_na['MAGERR_GAAP_{}'.format(b)] < 1)
+    if with_print:
+        n_left = mask.sum()
+        p_left = mask.sum() / data.shape[0] * 100
+        print('Removing errors bigger than 1: {} ({:.2f}%) left'.format(n_left, p_left))
 
     # Survey limiting magnitudes
     mask &= (
@@ -188,12 +199,10 @@ def clean_kids(data, with_print=True):
             (data_no_na['MAG_GAAP_R'] < 24.9) &
             (data_no_na['MAG_GAAP_I'] < 23.8)
     )
-    if with_print: print('Removing limiting magnitudes: {} left'.format(mask.sum()))
-
-    # Remove errors
-    for b in BANDS:
-        mask &= (data_no_na['MAGERR_GAAP_{}'.format(b)] < 1)
-    if with_print: print('Removing errors bigger than 1: {} left'.format(mask.sum()))
+    if with_print:
+        n_left = mask.sum()
+        p_left = mask.sum() / data.shape[0] * 100
+        print('Removing limiting magnitudes: {} ({:.2f}%) left'.format(n_left, p_left))
 
     # Remove flags
     # for c in FLAGS:
@@ -204,7 +213,10 @@ def clean_kids(data, with_print=True):
     flag_mask = 0b01111111
     for c in IMA_FLAGS:
         mask &= (data_no_na[c] & flag_mask == 0)
-    if with_print: print('Removing IMA flags: {} left'.format(mask.sum()))
+    if with_print:
+        n_left = mask.sum()
+        p_left = mask.sum() / data.shape[0] * 100
+        print('Removing IMA flags: {} ({:.2f}%) left'.format(n_left, p_left))
 
     # Tile flag
     # mask &= (data_no_na['TILE_FLAG'] == 0)
@@ -427,3 +439,14 @@ def process_2df(data):
     data['id1'] = data['id1'].apply(lambda x: x.upper())
     data = data.replace('GAL', 'GALAXY')
     return data
+
+
+def pretty_print_magnitude(str):
+    m = str.split('_')[-1]
+    return '{} magnitude'.format(m)
+
+
+def pretty_print_color(str):
+    m_1 = str.split('_')[-2]
+    m_2 = str.split('_')[-1]
+    return '{}-{} color'.format(m_1, m_2)
