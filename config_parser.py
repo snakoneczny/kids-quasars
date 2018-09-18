@@ -27,8 +27,6 @@ def add_experiment_name(cfg):
         cfg['exp_name'] = 'sdss-clean_{exp_name}'.format(exp_name=cfg['exp_name'])
 
     data_name = cfg['data_name'].replace('.', '_')
-    if cfg['subset']:
-        data_name = '{data_name}_{subset_name}'.format(data_name=data_name, subset_name=cfg['subset'])
 
     cfg['exp_name'] = '{data_name}_{exp_name}'.format(data_name=data_name, exp_name=cfg['exp_name'])
 

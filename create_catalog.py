@@ -42,7 +42,7 @@ data_path_train = '/media/snakoneczny/data/KiDS/{data_name}.cols.csv'.format(dat
 data_path_pred = '/media/snakoneczny/data/KiDS/{catalog_name}.cols.csv'.format(catalog_name=cfg['catalog_name'])
 
 # Read and process train data
-data = process_kids(data_path_train, subset=cfg['subset'], sdss_cleaning=cfg['clean_sdss'], cut=cfg['cut'])
+data = process_kids(data_path_train, sdss_cleaning=cfg['clean_sdss'], cut=cfg['cut'])
 
 # Create X and y
 X = data[cfg['features']]
@@ -58,8 +58,7 @@ model.fit(X, y)
 catalog_df = pd.DataFrame()
 
 for data_chunk in tqdm(pd.read_csv(data_path_pred, chunksize=4000000), desc='Inference'):
-    data_chunk = process_kids_data(data_chunk, subset=cfg['subset'], sdss_cleaning=False, cut=cfg['cut'],
-                                   with_print=False)
+    data_chunk = process_kids_data(data_chunk, sdss_cleaning=False, cut=cfg['cut'], with_print=False)
 
     X = data_chunk[cfg['features']]
     y_pred_proba = model.predict_proba(X)
@@ -72,6 +71,7 @@ logger.info('catalog size: {}'.format(catalog_df.shape))
 # TODO: make sure galactic coordinates are being saved as well
 # Save catalog
 if args.save:
-    catalog_path = 'outputs/catalogs/{exp_name}__{timestamp}.csv'.format(exp_name=cfg['exp_name'], timestamp=timestamp_start)
+    catalog_path = 'outputs/catalogs/{exp_name}__{timestamp}.csv'.format(exp_name=cfg['exp_name'],
+                                                                         timestamp=timestamp_start)
     catalog_df.to_csv(catalog_path, index=False)
     logger.info('catalog saved to: {}'.format(catalog_path))

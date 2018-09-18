@@ -109,22 +109,19 @@ FEATURES = {
 }
 
 
-def process_kids(path, subset=None, sdss_cleaning=False, cut=None, n=None, with_print=True):
+def process_kids(path, sdss_cleaning=False, cut=None, n=None, with_print=True):
     if n is not None:
         data = read_random_sample(path, n)
     else:
         data = pd.read_csv(path)
 
-    return process_kids_data(data, subset=subset, sdss_cleaning=sdss_cleaning, cut=cut, with_print=with_print)
+    return process_kids_data(data, sdss_cleaning=sdss_cleaning, cut=cut, with_print=with_print)
 
 
-def process_kids_data(data, subset=None, sdss_cleaning=False, cut=None, with_print=True):
+def process_kids_data(data, sdss_cleaning=False, cut=None, with_print=True):
     if with_print: print('Data shape: {}'.format(data.shape))
 
     data = clean_kids(data, with_print)
-
-    if subset:
-        data = get_subset(data, subset, with_print)
 
     if sdss_cleaning:
         data = clean_sdss(data)
@@ -159,19 +156,6 @@ def add_sdss_info(data, sdss_path):
     print(np.unique(data['CLASS_FILLED'], return_counts=True))
 
     return data, data_sdss
-
-
-def get_subset(data, subset, with_print=True):
-    if subset == 'star':
-        data_subset = data.loc[data['CLASS_STAR'] >= 0.5]
-    elif subset == 'non-star':
-        data_subset = data.loc[data['CLASS_STAR'] <= 0.5]
-    else:
-        raise (ValueError('{} is not an available subset'.format(subset)))
-
-    if with_print: print('Extracting {} subset: {}'.format(subset, data_subset.shape[0]))
-
-    return data_subset
 
 
 def clean_kids(data, with_print=True):

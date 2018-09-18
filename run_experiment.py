@@ -40,7 +40,7 @@ metrics_redshift = OrderedDict([
 
 # Read data
 data_path = '/media/snakoneczny/data/KiDS/{data_name}.cols.csv'.format(data_name=cfg['data_name'])
-data = process_kids(data_path, subset=cfg['subset'], sdss_cleaning=cfg['clean_sdss'], cut=cfg['cut'])
+data = process_kids(data_path, sdss_cleaning=cfg['clean_sdss'], cut=cfg['cut'])
 
 # Get X and y
 X = data[cfg['features']].as_matrix()
