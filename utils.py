@@ -223,36 +223,36 @@ def clean_sdss(data, with_print=True):
     return data_cleaned
 
 
-def process_gaia(data, error_lim=1, parallax_lim=None, pm_lim=None):
-    data = norm_gaia_observations(data)
-    data = clean_gaia(data, error_lim=error_lim, parallax_lim=parallax_lim, pm_lim=pm_lim)
-    return data
-
-
-def clean_gaia(data, error_lim=1, parallax_lim=None, pm_lim=None, with_print=True):
-    if with_print: print('Data shape: {}'.format(data.shape))
-
-    # Get 5 position observations
-    movement_mask = ~data[['parallax', 'pmdec', 'pmra']].isnull().any(axis=1)
+def process_gaia(data, parallax_error=1, pm_error=None, parallax_lim=None, pm_lim=None, with_print=True):
+    # Get 5 position observations (parallax should suffice)
+    movement_mask = ~data[['parallax']].isnull().any(axis=1)
     data = data.loc[movement_mask]
     if with_print: print('5 position shape: {}'.format(data.shape))
 
-    if error_lim:
-        data = data.loc[data['parallax_error'] < error_lim]
+    data = norm_gaia_observations(data)
+    data = clean_gaia(data, parallax_error=parallax_error, pm_error=pm_error, parallax_lim=parallax_lim, pm_lim=pm_lim,
+                      with_print=with_print)
+    return data
+
+
+def clean_gaia(data, parallax_error=1, pm_error=None, parallax_lim=None, pm_lim=None, with_print=True):
+    if parallax_error:
+        data = data.loc[data['parallax_error'] < parallax_error]
         if with_print: print('Removing paralax_error shape: {}'.format(data.shape))
 
-        data = data.loc[data['pmra_error'] < error_lim]
+    if pm_error:
+        data = data.loc[data['pmra_error'] < pm_error]
         if with_print: print('Removing pmra_error shape: {}'.format(data.shape))
 
-        data = data.loc[data['pmdec_error'] < error_lim]
+        data = data.loc[data['pmdec_error'] < pm_error]
         if with_print: print('Removing pmdec_error shape: {}'.format(data.shape))
 
     if parallax_lim:
-        data = data.loc[(data['parallax_norm'] > parallax_lim[0]) & (data['parallax_norm'] < parallax_lim[1])]
+        data = data.loc[(data['parallax'] > parallax_lim[0]) & (data['parallax'] < parallax_lim[1])]
         if with_print: print('Removing parallax_norm shape: {}'.format(data.shape))
 
     if pm_lim:
-        proper_motion_mask = (data['pmra_norm'].pow(2) + data['pmdec_norm'].pow(2) < pm_lim)
+        proper_motion_mask = (data['pmra'].pow(2) + data['pmdec'].pow(2) < pm_lim)
         data = data.loc[proper_motion_mask]
         if with_print: print('Removing pmra_norm and pmdec_norm shape: {}'.format(data.shape))
 
@@ -296,14 +296,6 @@ def describe_column(data):
     s = sum(counts)
     contribution = counts / s * 100
     return values, counts, contribution
-
-
-def print_feature_ranking(model, features):
-    importances = model.feature_importances_
-    indices = np.argsort(importances)[::-1]
-    logger.info('feature ranking')
-    for f in range(len(features)):
-        print('%d. feature %s (%f)' % (f + 1, features[indices[f]], importances[indices[f]]))
 
 
 def r_train_test_split(*args, train_val, test):
@@ -426,11 +418,21 @@ def process_2df(data):
 
 
 def pretty_print_magnitude(str):
-    m = str.split('_')[-1]
+    m = str.split('_')[-1].lower()
     return '{} magnitude'.format(m)
 
 
-def pretty_print_color(str):
-    m_1 = str.split('_')[-2]
-    m_2 = str.split('_')[-1]
-    return '{}-{} color'.format(m_1, m_2)
+def pretty_print_mags_combination(str):
+    m_1 = str.split('_')[-2].lower()
+    m_2 = str.split('_')[-1].lower()
+    combination = str.split('_')[0].lower()
+    return '{}-{} {}'.format(m_1, m_2, combination)
+
+
+def pretty_print_feature(str):
+    if str == 'CLASS_STAR':
+        return 'stellarity_index'
+    elif str.startswith('MAG'):
+        return pretty_print_magnitude(str)
+    else:
+        return pretty_print_mags_combination(str)

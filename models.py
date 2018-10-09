@@ -11,20 +11,20 @@ from keras.utils import np_utils
 
 def build_rf_clf(params):
     return RandomForestClassifier(
-        n_estimators=400, random_state=491237, criterion='entropy', n_jobs=8,
+        n_estimators=400, random_state=491237, criterion='entropy', n_jobs=12,
         # class_weight={'QSO': 0.4, 'STAR': 0.4, 'GALAXY': 0.2}
     )
 
 
 def build_rf_reg(params):
     return RandomForestRegressor(
-        n_estimators=100, random_state=491237, n_jobs=8,
+        n_estimators=100, random_state=491237, n_jobs=12,
     )
 
 
 def build_xgb_clf(params):
     return XGBClassifier(
-        max_depth=7, learning_rate=0.1, n_estimators=200, objective='multi:softmax', booster='gbtree', n_jobs=8,
+        max_depth=7, learning_rate=0.1, n_estimators=200, objective='multi:softmax', booster='gbtree', n_jobs=12,
         gamma=0, min_child_weight=1, max_delta_step=0, subsample=1, colsample_bytree=1, colsample_bylevel=1,
         reg_alpha=0, reg_lambda=1, scale_pos_weight=1, base_score=0.5, random_state=18235, missing=None
     )

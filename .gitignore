@@ -10,5 +10,6 @@ regions/
 report/
 maps/
 paper/
+outputs/
 
 *.csv

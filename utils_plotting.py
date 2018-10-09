@@ -7,7 +7,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from utils import BASE_CLASSES, EXTERNAL_QSO_DICT, BAND_CALIB_COLUMNS, process_2df
+from utils import BASE_CLASSES, EXTERNAL_QSO_DICT, BAND_CALIB_COLUMNS, process_2df, pretty_print_feature
 
 CUSTOM_COLORS = {
     'QSO': (0.08605633600581403, 0.23824692404212, 0.30561236308077167),
@@ -121,7 +121,7 @@ def plot_histograms(data_dict, columns=BAND_CALIB_COLUMNS, x_lim_dict=None, titl
         plt.figure()
         for i, (label, data) in enumerate(data_dict.items()):
             sns.distplot(data[column], label=label, kde=False, rug=False, norm_hist=True, color=color_palette[i],
-                         hist_kws={'alpha': 0.5, 'histtype': 'step', 'linewidth': 1.5, 'linestyle': get_line_style(i)})
+                         hist_kws={'alpha': 1.0, 'histtype': 'step', 'linewidth': 1.5, 'linestyle': get_line_style(i)})
 
         if x_lim_dict and column in x_lim_dict:
             plt.xlim(x_lim_dict[column][0], x_lim_dict[column][1])
@@ -219,9 +219,33 @@ def plot_proba_against_qxternal_qso(data):
         if external_qso_name == 'x 2QZ/6QZ':
             external_qso_name += ' quasars'
 
-        plt.plot(thresholds, data_size_arr, label=external_qso_name, linestyle=get_line_style(i),
+        plt.plot(thresholds, data_size_arr, label=external_qso_name, linestyle=get_line_style(i), alpha=1.0,
                  color=color_palette[i])
         plt.xlabel('QSO probability threshold')
         plt.ylabel('cross match size')
 
     plt.legend()
+
+
+# TODO: nicer plot
+def plot_feature_ranking(model, features):
+    importances = model.feature_importances_ * 100
+    # TODO: no std because it's too big
+    # std = np.std([tree.feature_importances_ for tree in model.estimators_], axis=0)
+    indices = np.argsort(importances)[::-1]
+
+    fig, ax = plt.subplots(figsize=(6, 7))
+    ax.barh(range(len(features)), importances[indices], align='center', color=get_cubehelix_palette(1)[0])
+    ax.set_yticks(range(len(features)))
+    feature_names = [pretty_print_feature(feature_name) for feature_name in features[indices]]
+    ax.set_yticklabels(feature_names)
+    ax.invert_yaxis()
+    ax.set_xlabel('feature importance (%)')
+
+    # TODO
+    for i, value in enumerate(importances[indices]):
+        offset = -4.2 if i == 0 else .35
+        color = 'white' if i == 0 else 'black'
+        ax.text(value + offset, i + .2, '{:.2f}%'.format(value), color=color)
+
+    plt.show()

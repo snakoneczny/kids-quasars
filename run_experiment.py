@@ -9,8 +9,9 @@ import numpy as np
 from sklearn.model_selection import KFold, train_test_split
 from sklearn.metrics import accuracy_score, f1_score, mean_squared_error, mean_absolute_error
 from sklearn.preprocessing import LabelEncoder
+from sklearn.externals import joblib
 
-from utils import logger, process_kids, print_feature_ranking, get_estimation_type, get_model_type
+from utils import logger, process_kids, get_estimation_type, get_model_type
 from utils_evaluation import metric_class_split
 
 timestamp_start = datetime.datetime.now().strftime('%Y-%m-%d_%H:%M:%S')
@@ -186,18 +187,21 @@ predictions_df, validation_report = validation(data, X_train_val, y_train_val, z
 # Testing
 test_report = test(X_train_val, X_test, y_train_val, y_test, z_train_val, z_test)
 
-# Print feature ranking
-if model_type in ['rf', 'xgb']:
-    print_feature_ranking(model, cfg['features'])
-
 # Finish by showing reports
 logger.info(validation_report)
 logger.info(test_report)
 
-# TODO: right now we save only validation predictions, but test should also be saved if we want to report test scores
-# Save predictions df
 if args.save:
-    predictions_path = 'outputs/experiments/{exp_name}__{timestamp}.csv'.format(exp_name=cfg['exp_name'],
-                                                                        timestamp=timestamp_start)
+    # TODO: right now we save only validation predictions, but test should also be saved if we want to report test scores
+    # Save predictions df
+    predictions_path = 'outputs/test_preds/{exp_name}__{timestamp}.csv'.format(exp_name=cfg['exp_name'],
+                                                                               timestamp=timestamp_start)
     predictions_df.to_csv(predictions_path, index=False)
     logger.info('predictions saved to: {}'.format(predictions_path))
+
+    # TODO: joblib will not work with neural nets probably
+    # Save model
+    model_path = 'outputs/test_models/{exp_name}__{timestamp}.joblib'.format(exp_name=cfg['exp_name'],
+                                                                             timestamp=timestamp_start)
+    joblib.dump(model, model_path)
+    logger.info('model saved to: {}'.format(model_path))

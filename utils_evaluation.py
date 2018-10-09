@@ -41,7 +41,7 @@ def multiclass_report(predictions, class_names, col_true='CLASS'):
 
     cnf_matrix = confusion_matrix(y_true, y_pred)
     plt.figure()
-    plot_confusion_matrix(cnf_matrix, classes=class_names, title='Confusion matrix, without normalization')
+    plot_confusion_matrix(cnf_matrix, classes=class_names, title='Confusion matrix')
     plt.figure()
     plot_confusion_matrix(cnf_matrix, classes=class_names, normalize=True, title='Normalized confusion matrix')
     plt.show()
@@ -101,9 +101,9 @@ def classification_z_report(predictions, col_true='CLASS', z_max=None):
         for i, class_pred in enumerate(BASE_CLASSES):
             sns.distplot(true_class_as_dict[class_pred], label='{} clf. as {}'.format(class_true, class_pred),
                          bins=bin_edges, kde=False, rug=False, color=color_palette[i],
-                         hist_kws={'alpha': 0.5, 'histtype': 'step', 'linewidth': 1.5, 'linestyle': get_line_style(i)})
-        plt.xlabel('z')
-        plt.ylabel('counts')
+                         hist_kws={'alpha': 1.0, 'histtype': 'step', 'linewidth': 1.5, 'linestyle': get_line_style(i)})
+        plt.xlabel('redshift')
+        plt.ylabel('counts per bin')
         plt.legend(loc='upper left')
 
 
@@ -159,7 +159,7 @@ def number_counts(data, x_lim=None, title=None, legend_loc='upper left'):
 
 
 def number_counts_multidata(data_dict, x_lim, band=MAG_GAAP_CALIB_R, legend_loc='upper left'):
-    bins = np.arange(x_lim[0], x_lim[1] + 1.0, 1.0)
+    bins = np.arange(x_lim[0], x_lim[1] + .5, .5)
     bin_titles = ['({}, {}]'.format(bins[i], bins[i + 1]) for i, _ in enumerate(bins[:-1])]
 
     counts = pd.DataFrame()
@@ -175,6 +175,9 @@ def number_counts_multidata(data_dict, x_lim, band=MAG_GAAP_CALIB_R, legend_loc=
     sns.catplot(x=band, y='objects', hue='dataset', data=counts, kind='bar',
                 aspect=1.6, height=5, legend_out=False, palette='cubehelix')
     plt.legend(loc=legend_loc)
+    plt.xlabel(pretty_print_magnitude(band))
+    plt.xticks(rotation=30)
+    plt.ylabel('counts per bin')
     plt.yscale('log')
 
 
@@ -305,39 +308,35 @@ def test_against_external_catalog(ext_catalog, catalog, class_column='CLASS', id
         catalog.loc[is_in_ext].to_csv('catalogs_intersection/{}.csv'.format(title))
 
 
-def gaia_motion_analysis(data, norm=True):
+def gaia_motion_analysis(data, norm=False):
     movement_mask = ~data[['parallax', 'pmdec', 'pmra']].isnull().any(axis=1)
     data_movement = data.loc[movement_mask]
 
     classes = ['QSO', 'GALAXY', 'STAR']
-    motions = ['parallax', 'pmra', 'pmdec']
-    if norm: motions = [m + '_norm' for m in motions]
-    mu_df = pd.DataFrame(index=classes, columns=motions)
-    sigma_df = pd.DataFrame(index=classes, columns=motions)
-    median_df = pd.DataFrame(index=classes, columns=motions)
-
     for class_name in classes:
+
+        motions = ['parallax', 'pmra', 'pmdec']
+        if norm & (class_name == 'QSO'):
+            motions = [m + '_norm' for m in motions]
+        result_df = pd.DataFrame(index=['mu', 'median', 'sigma'], columns=motions)
+
         for motion in motions:
-            data_of_interest = data_movement.loc[data_movement['CLASS'] == class_name][motion]
+            data_of_interest = data_movement.loc[data_movement['CLASS'] == class_name, motion]
             (mu, sigma) = stats.norm.fit(data_of_interest)
             median = np.median(data_of_interest)
 
-            mu_df.loc[class_name, motion] = mu
-            sigma_df.loc[class_name, motion] = sigma
-            median_df.loc[class_name, motion] = median
+            result_df.loc['mu', motion] = mu
+            result_df.loc['median', motion] = median
+            result_df.loc['sigma', motion] = sigma
 
             plt.figure()
             sns.distplot(data_of_interest, color=get_cubehelix_palette(1)[0], kde_kws=dict(bw=0.5))
-            if motion == 'parallax_norm':
-                plt.xlim((-6, 6))
+            # if motion == 'parallax_norm':
+            #     plt.xlim((-6, 6))
             plt.ylabel(class_name)
 
-    print('Mean:')
-    display(mu_df)
-    print('Sigma:')
-    display(sigma_df)
-    print('Median:')
-    display(median_df)
+        print('{}:'.format(class_name))
+        display(result_df)
 
 
 def proba_motion_analysis(data_x_gaia, motions=['parallax'], x_lim=(0.3, 1), step=0.02):
