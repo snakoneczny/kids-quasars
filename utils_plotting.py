@@ -7,7 +7,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from utils import BASE_CLASSES, EXTERNAL_QSO_DICT, BAND_CALIB_COLUMNS, process_2df, pretty_print_feature
+from utils import BASE_CLASSES, EXTERNAL_QSO_DICT, BAND_CALIB_COLUMNS, process_2df, pretty_print_feature, \
+    get_external_qso_short_name
 
 CUSTOM_COLORS = {
     'QSO': (0.08605633600581403, 0.23824692404212, 0.30561236308077167),
@@ -199,7 +200,43 @@ def plot_proba_against_size(data, column='QSO', x_lim=(0, 1), step=0.01):
     plt.ylabel('{} size'.format(column))
 
 
-def plot_proba_against_qxternal_qso(data):
+def plot_external_qso_consistency(catalog):
+    step = 0.05
+    thresholds = np.arange(0.3, 1.0, step)
+    color_palette = get_cubehelix_palette(len(EXTERNAL_QSO_DICT))
+
+    # Read data
+    data_dict = OrderedDict(
+        (data_name, pd.read_csv(data_path)) for data_name, data_path in EXTERNAL_QSO_DICT.items())
+
+    # Take only QSOs for 2QZ/6QZ
+    data_tmp = process_2df(data_dict['x 2QZ/6QZ'])
+    data_dict['x 2QZ/6QZ'] = data_tmp.loc[data_tmp['id1'] == 'QSO']
+
+    for i, (external_qso_name, external_qso) in enumerate(data_dict.items()):
+        threshold_data_arr = [catalog.loc[catalog[['QSO', 'STAR', 'GALAXY']].max(axis=1) >= thr][['ID', 'CLASS']] for
+                              thr in
+                              thresholds]
+        intersection_data_arr = [thr_data.loc[thr_data['ID'].isin(external_qso['ID'])] for thr_data in
+                                 threshold_data_arr]
+        qso_data_arr = [int_data.loc[int_data['CLASS'] == 'QSO'] for int_data in intersection_data_arr]
+
+        agreement_arr = [qso_data_arr[i].shape[0] / float(intersection_data_arr[i].shape[0]) for i, _ in
+                         enumerate(qso_data_arr)]
+
+        # TODO: Ugly work around
+        external_qso_name = get_external_qso_short_name(external_qso_name)
+        # if external_qso_name == 'x 6QZ':
+        external_qso_name += ' QSO'
+
+        plt.plot(thresholds, agreement_arr, label=external_qso_name, linestyle=get_line_style(i), alpha=1.0,
+                 color=color_palette[i])
+        plt.xlabel('KiDS QSO minimum probability')
+        plt.ylabel('KiDS QSO contribution')
+        plt.legend(loc='lower left')
+
+
+def plot_external_qso_size(data):
     step = 0.01
     thresholds = np.arange(0.3, 1.0 + step, step)
     color_palette = get_cubehelix_palette(len(EXTERNAL_QSO_DICT))

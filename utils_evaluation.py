@@ -325,7 +325,7 @@ def gaia_motion_analysis(data, norm=False):
             (mu, sigma) = stats.norm.fit(data_of_interest)
             median = np.median(data_of_interest)
 
-            result_df.loc['mu', motion] = mu
+            result_df.loc['mean', motion] = mu
             result_df.loc['median', motion] = median
             result_df.loc['sigma', motion] = sigma
 
@@ -361,7 +361,7 @@ def proba_motion_analysis(data_x_gaia, motions=['parallax'], x_lim=(0.3, 1), ste
             median_dict[motion].append(median)
 
     # Plot statistics
-    to_plot = [(mu_dict, 'mu'), (sigma_dict, 'sigma'), (median_dict, 'median')]
+    to_plot = [(mu_dict, 'mean'), (sigma_dict, 'sigma'), (median_dict, 'median')]
     color_palette = get_cubehelix_palette(len(motions))
 
     for t in to_plot:
@@ -369,7 +369,7 @@ def proba_motion_analysis(data_x_gaia, motions=['parallax'], x_lim=(0.3, 1), ste
 
         for i, motion in enumerate(motions):
             plt.plot(thresholds, t[0][motion], label=motion, color=color_palette[i], linestyle=get_line_style(i))
-            plt.xlabel('probability threshold')
+            plt.xlabel('minimum classification probability')
             plt.ylabel(t[1])
 
         plt.legend()

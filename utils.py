@@ -436,3 +436,12 @@ def pretty_print_feature(str):
         return pretty_print_magnitude(str)
     else:
         return pretty_print_mags_combination(str)
+
+def get_external_qso_short_name(full_name):
+    short_names = {
+        'x 2QZ/6QZ': 'x 2QZ',
+        'x Richards 2009': 'x R09',
+        'x Richards 2015': 'x R15',
+        'x DiPompeo 2015': 'x DP15',
+    }
+    return short_names[full_name]
