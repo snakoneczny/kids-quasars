@@ -11,20 +11,20 @@ from utils_plotting import plot_confusion_matrix, plot_roc_curve, plot_precision
     get_cubehelix_palette
 
 
-def classification_report(predictions, col_true='CLASS', z_max=None):
+def classification_report(predictions, col_true='CLASS', z_max=None, true_label='SDSS'):
     class_names = np.unique(predictions[col_true])
     predictions['class_pred'] = predictions[class_names].idxmax(axis=1)
 
     np.set_printoptions(precision=4)
 
-    multiclass_report(predictions, class_names, col_true=col_true)
+    multiclass_report(predictions, class_names, col_true=col_true, true_label=true_label)
     binary_report(predictions, col_true=col_true)
 
     if 'Z' in predictions.columns:
         classification_z_report(predictions, col_true=col_true, z_max=z_max)
 
 
-def multiclass_report(predictions, class_names, col_true='CLASS'):
+def multiclass_report(predictions, class_names, col_true='CLASS', true_label='SDSS'):
     print('Multiclass classification results:')
 
     y_true = predictions[col_true]
@@ -41,9 +41,9 @@ def multiclass_report(predictions, class_names, col_true='CLASS'):
 
     cnf_matrix = confusion_matrix(y_true, y_pred)
     plt.figure()
-    plot_confusion_matrix(cnf_matrix, classes=class_names, title='Confusion matrix')
+    plot_confusion_matrix(cnf_matrix, classes=class_names, true_label=true_label)
     plt.figure()
-    plot_confusion_matrix(cnf_matrix, classes=class_names, normalize=True, title='Normalized confusion matrix')
+    plot_confusion_matrix(cnf_matrix, classes=class_names, normalize=True, true_label=true_label)
     plt.show()
 
 
@@ -246,7 +246,7 @@ def number_counts_pixels(data, nside=58, x_lim=None, title=None, legend_loc='upp
     plt.title(title)
 
 
-def test_external_qso(catalog, save=False):
+def test_external_qso(catalog, save=False, plot=True):
     print('catalog size: {}'.format(catalog.shape[0]))
     print(describe_column(catalog['CLASS']))
 
@@ -259,7 +259,7 @@ def test_external_qso(catalog, save=False):
             external_catalog = external_catalog.loc[external_catalog['id1'] == 'QSO']
 
         title = os.path.basename(external_path)[:-4]
-        test_against_external_catalog(external_catalog, catalog, title=title, save=save)
+        test_against_external_catalog(external_catalog, catalog, title=title, plot=plot, save=save)
 
 
 def test_gaia(catalog, catalog_x_gaia_path, class_column='CLASS', id_column='ID', save=False):
@@ -277,7 +277,8 @@ def test_gaia(catalog, catalog_x_gaia_path, class_column='CLASS', id_column='ID'
                                   title='GAIA', save=save)
 
 
-def test_against_external_catalog(ext_catalog, catalog, class_column='CLASS', id_column='ID', title='', save=False):
+def test_against_external_catalog(ext_catalog, catalog, class_column='CLASS', id_column='ID', title='', plot=True,
+                                  save=False):
     is_in_ext = catalog[id_column].isin(ext_catalog[id_column])
     catalogs_cross = catalog.loc[is_in_ext]
     n_train_in_ext = sum(catalogs_cross['train']) if 'train' in catalogs_cross.columns else 0
@@ -295,14 +296,15 @@ def test_against_external_catalog(ext_catalog, catalog, class_column='CLASS', id
         print(describe_column(catalogs_cross_no_train[class_column]))
 
     # Plot class histograms
-    if 'MAG_GAAP_CALIB_U' in catalogs_cross.columns:
-        for c in BAND_CALIB_COLUMNS:
-            plt.figure()
-            for t in ['STAR', 'GALAXY', 'QSO']:
-                sns.distplot(catalogs_cross.loc[catalogs_cross['CLASS'] == t][c], label=t, kde=False, rug=False,
-                             hist_kws={'alpha': 0.5, 'histtype': 'step'})
-                plt.title(title)
-            plt.legend()
+    if plot:
+        if 'MAG_GAAP_CALIB_U' in catalogs_cross.columns:
+            for c in BAND_CALIB_COLUMNS:
+                plt.figure()
+                for t in ['STAR', 'GALAXY', 'QSO']:
+                    sns.distplot(catalogs_cross.loc[catalogs_cross['CLASS'] == t][c], label=t, kde=False, rug=False,
+                                 hist_kws={'alpha': 0.5, 'histtype': 'step'})
+                    plt.title(title)
+                plt.legend()
 
     if save:
         catalog.loc[is_in_ext].to_csv('catalogs_intersection/{}.csv'.format(title))
@@ -318,7 +320,7 @@ def gaia_motion_analysis(data, norm=False):
         motions = ['parallax', 'pmra', 'pmdec']
         if norm & (class_name == 'QSO'):
             motions = [m + '_norm' for m in motions]
-        result_df = pd.DataFrame(index=['mu', 'median', 'sigma'], columns=motions)
+        result_df = pd.DataFrame(index=['mean', 'median', 'sigma'], columns=motions)
 
         for motion in motions:
             data_of_interest = data_movement.loc[data_movement['CLASS'] == class_name, motion]
@@ -331,8 +333,8 @@ def gaia_motion_analysis(data, norm=False):
 
             plt.figure()
             sns.distplot(data_of_interest, color=get_cubehelix_palette(1)[0], kde_kws=dict(bw=0.5))
-            # if motion == 'parallax_norm':
-            #     plt.xlim((-6, 6))
+            if motion == 'parallax':
+                plt.xlim((-6, 6))
             plt.ylabel(class_name)
 
         print('{}:'.format(class_name))
@@ -370,6 +372,9 @@ def proba_motion_analysis(data_x_gaia, motions=['parallax'], x_lim=(0.3, 1), ste
         for i, motion in enumerate(motions):
             plt.plot(thresholds, t[0][motion], label=motion, color=color_palette[i], linestyle=get_line_style(i))
             plt.xlabel('minimum classification probability')
-            plt.ylabel(t[1])
+            plt.ylabel('{} {}'.format(t[1], '[mas]'))
+
+            ax = plt.axes()
+            ax.yaxis.grid(True)
 
         plt.legend()

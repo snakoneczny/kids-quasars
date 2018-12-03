@@ -1,10 +1,9 @@
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from xgboost import XGBClassifier
-
 from sklearn.base import BaseEstimator
 from keras.models import Sequential, Model
 from keras.layers import Input, Dense
-from keras.optimizers import Adam, SGD
+from keras.optimizers import Adam
 from sklearn.preprocessing import MinMaxScaler
 from keras.utils import np_utils
 
@@ -89,7 +88,7 @@ class AstroNet(BaseEstimator):
                            {'category_output': np_utils.to_categorical(validation_data[1]['category_output']),
                             'redshift_output': validation_data[1]['redshift_output']})
 
-        self.network.fit(X, y, validation_data=validation_data, epochs=200, batch_size=64, verbose=1)
+        self.network.fit(X, y, validation_data=validation_data, epochs=50, batch_size=64, verbose=1)
 
     def predict(self, X):
         X = self.scaler.transform(X)

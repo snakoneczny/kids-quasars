@@ -418,24 +418,25 @@ def process_2df(data):
 
 
 def pretty_print_magnitude(str):
-    m = str.split('_')[-1].lower()
-    return '{} magnitude'.format(m)
+    return str.split('_')[-1].lower() + ' magnitude'
 
 
 def pretty_print_mags_combination(str):
-    m_1 = str.split('_')[-2].lower()
-    m_2 = str.split('_')[-1].lower()
-    combination = str.split('_')[0].lower()
-    return '{}-{} {}'.format(m_1, m_2, combination)
+    m_1 = str.split('_')[-2]
+    m_2 = str.split('_')[-1]
+    combination = str.split('_')[0]
+    combination_symbol = {'COLOR': '-', 'RATIO': '/'}[combination]
+    return '{}{}{} {}'.format(m_1, combination_symbol, m_2, combination).lower()
 
 
 def pretty_print_feature(str):
     if str == 'CLASS_STAR':
-        return 'stellarity_index'
+        return 'stellarity index'
     elif str.startswith('MAG'):
         return pretty_print_magnitude(str)
     else:
         return pretty_print_mags_combination(str)
+
 
 def get_external_qso_short_name(full_name):
     short_names = {

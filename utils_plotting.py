@@ -38,17 +38,21 @@ def get_cubehelix_palette(n):
 
 
 def plot_embedding(embedding, labels, label='class', is_continuous=False, alpha=0.5, color_palette='cubehelix',
-                   with_custom_colors=True):
+                   with_custom_colors=True, labels_in_order=False, legend_loc='upper right'):
     if not is_continuous:
         labels_unique = np.unique(labels)
         n_colors = len(labels_unique)
-        color_palette = sns.color_palette(color_palette, n_colors)
-        color_palette = {labels_unique[k]: v for k, v in enumerate(color_palette)}
+        if isinstance(color_palette, str):
+            color_palette = sns.color_palette(color_palette, n_colors)
+            color_palette = {labels_unique[k]: v for k, v in enumerate(color_palette)}
         if with_custom_colors: color_palette.update(CUSTOM_COLORS)
 
         data = pd.DataFrame({'x': embedding[:, 0], 'y': embedding[:, 1], label: labels})
+        hue_order = color_palette.keys() if labels_in_order else None
         sns.lmplot(x='x', y='y', hue=label, data=data, palette=color_palette, fit_reg=False,
-                   scatter_kws={'alpha': alpha}, size=7)
+                   scatter_kws={'alpha': alpha}, size=7, hue_order=hue_order, legend=False)
+        plt.legend(loc=legend_loc)
+
     else:
         cmap = sns.cubehelix_palette(as_cmap=True)
         f, ax = plt.subplots(figsize=(9, 7))
@@ -57,19 +61,16 @@ def plot_embedding(embedding, labels, label='class', is_continuous=False, alpha=
         cb.set_label(label)
 
 
-def plot_confusion_matrix(cm, classes,
-                          normalize=False,
-                          title='Confusion matrix'):
+def plot_confusion_matrix(cm, classes, normalize=False, true_label='SDSS'):
     """
     This function prints and plots the confusion matrix.
     Normalization can be applied by setting `normalize=True`.
     """
     if normalize:
-        cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+        cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis] * 100
 
     cmap = sns.cubehelix_palette(light=.95, as_cmap=True)
     plt.imshow(cm, interpolation='nearest', cmap=cmap)
-    plt.title(title)
     plt.colorbar()
     tick_marks = np.arange(len(classes))
     plt.xticks(tick_marks, classes, rotation=45)
@@ -78,13 +79,14 @@ def plot_confusion_matrix(cm, classes,
     fmt = '.2f' if normalize else 'd'
     thresh = cm.max() / 2.
     for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
-        plt.text(j, i, format(cm[i, j], fmt),
-                 horizontalalignment='center',
+        str = format(cm[i, j], fmt)
+        if normalize: str += '%'
+        plt.text(j, i, str, horizontalalignment='center',
                  color='white' if cm[i, j] > thresh else 'black')
 
     plt.tight_layout()
-    plt.ylabel('True label')
-    plt.xlabel('Predicted label')
+    plt.ylabel('{} - true label'.format(true_label))
+    plt.xlabel('KiDS - predicted label')
 
 
 def plot_roc_curve(fpr, tpr, roc_auc):
@@ -129,20 +131,23 @@ def plot_histograms(data_dict, columns=BAND_CALIB_COLUMNS, x_lim_dict=None, titl
 
         if title: plt.title(title)
         if pretty_print_function: plt.xlabel(pretty_print_function(column))
-        plt.ylabel('normalized counts')
+        plt.ylabel('normalized counts per bin')
         prop = {'size': legend_size} if legend_size else {}
         plt.legend(loc=legend_loc, prop=prop)
 
+        plt.tight_layout()
+
 
 def plot_class_histograms(data, columns, class_column='CLASS', title=None, log_y=False):
-    color_palette = sns.color_palette('cubehelix', len(BASE_CLASSES))
+    color_palette = get_cubehelix_palette(len(BASE_CLASSES))
     for c in columns:
         plt.figure()
         for i, t in enumerate(BASE_CLASSES):
             sns.distplot(data.loc[data[class_column] == t][c], label=t, kde=False, rug=False, color=color_palette[i],
-                         hist_kws={'alpha': 0.5, 'histtype': 'step'})
+                         hist_kws={'alpha': 0.5, 'histtype': 'step', 'linewidth': 1.5, 'linestyle': get_line_style(i)})
         if log_y: plt.yscale('log')
         if title: plt.title(title)
+        plt.xlabel(pretty_print_feature(c))
         plt.legend()
 
 
@@ -213,6 +218,8 @@ def plot_external_qso_consistency(catalog):
     data_tmp = process_2df(data_dict['x 2QZ/6QZ'])
     data_dict['x 2QZ/6QZ'] = data_tmp.loc[data_tmp['id1'] == 'QSO']
 
+    plt.figure()
+
     for i, (external_qso_name, external_qso) in enumerate(data_dict.items()):
         threshold_data_arr = [catalog.loc[catalog[['QSO', 'STAR', 'GALAXY']].max(axis=1) >= thr][['ID', 'CLASS']] for
                               thr in
@@ -231,9 +238,22 @@ def plot_external_qso_consistency(catalog):
 
         plt.plot(thresholds, agreement_arr, label=external_qso_name, linestyle=get_line_style(i), alpha=1.0,
                  color=color_palette[i])
-        plt.xlabel('KiDS QSO minimum probability')
-        plt.ylabel('KiDS QSO contribution')
-        plt.legend(loc='lower left')
+
+    plt.xlabel('KiDS minimum probability')
+    plt.ylabel('KiDS QSO contribution')
+    legend = plt.legend(loc='lower left')
+    plt.tight_layout()
+
+    ax = plt.axes()
+    ax.yaxis.grid(True)
+
+    # Customized legend place
+    ax = plt.gca()
+    bounding_box = legend.get_bbox_to_anchor().inverse_transformed(ax.transAxes)
+    y_offset = 0.08
+    bounding_box.y0 += y_offset
+    bounding_box.y1 += y_offset
+    legend.set_bbox_to_anchor(bounding_box, transform=ax.transAxes)
 
 
 def plot_external_qso_size(data):
@@ -281,8 +301,8 @@ def plot_feature_ranking(model, features):
 
     # TODO
     for i, value in enumerate(importances[indices]):
-        offset = -4.2 if i == 0 else .35
+        offset = -5.0 if i == 0 else .35
         color = 'white' if i == 0 else 'black'
         ax.text(value + offset, i + .2, '{:.2f}%'.format(value), color=color)
 
-    plt.show()
+    plt.tight_layout()
