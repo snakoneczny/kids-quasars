@@ -1,3 +1,5 @@
+import numpy as np
+import pandas as pd
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from xgboost import XGBClassifier
 from sklearn.base import BaseEstimator
@@ -29,19 +31,40 @@ def build_xgb_clf(params):
     )
 
 
-def build_ann_clf(params):
-    model = Sequential()
-    model.add(Dense(20, input_dim=params['n_features'], activation='relu'))
-    model.add(Dense(20, activation='relu'))
-    model.add(Dense(3, activation='softmax'))
+class AnnClf(BaseEstimator):
 
-    model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['accuracy'])
+    def __init__(self, params):
+        self.params = params
+        self.scaler = MinMaxScaler()
+        self.network = None
 
-    return model
+    def __create_network(self, params):
+        model = Sequential()
+        model.add(Dense(20, input_dim=params['n_features'], activation='relu'))
+        model.add(Dense(20, activation='relu'))
+        model.add(Dense(3, activation='softmax', name='category_output'))
 
+        loss = {'category_output': 'categorical_crossentropy'}
 
-def build_astronet(params):
-    return AstroNet(params)
+        model.compile(loss=loss, optimizer='adam', metrics=['accuracy'])
+
+        return model
+
+    def fit(self, X, y, validation_data=None):
+        X = self.scaler.fit_transform(X)
+        y['category_output'] = np_utils.to_categorical(y['category_output'])
+        self.network = self.__create_network(self.params)
+
+        validation_data = (self.scaler.transform(validation_data[0]),
+                           {'category_output': np_utils.to_categorical(validation_data[1]['category_output'])})
+
+        self.network.fit(X, y, validation_data=validation_data, epochs=50, batch_size=64, verbose=1)
+
+    def predict(self, X, encoder):
+        X = self.scaler.transform(X)
+        y_pred_proba = self.network.predict(X)
+        predictions_df = decode_clf_preds(y_pred_proba, encoder)
+        return predictions_df
 
 
 class AstroNet(BaseEstimator):
@@ -54,17 +77,23 @@ class AstroNet(BaseEstimator):
     def __create_network(self, params):
         inputs = Input(shape=(params['n_features'],))
 
+        # Main branch
         x = Dense(80, activation='relu')(inputs)
         x = Dense(80, activation='relu')(x)
         x = Dense(80, activation='relu')(x)
         x = Dense(60, activation='relu')(x)
-        x = Dense(40, activation='relu')(x)
+        x = Dense(60, activation='relu')(x)
 
-        # y = Dense(20, activation='relu')(x)
-        # z = Dense(20, activation='relu')(x)
+        # Class branch
+        y = Dense(40, activation='relu')(x)
+        y = Dense(40, activation='relu')(y)
 
-        preds_category = Dense(3, activation='softmax', name='category_output')(x)
-        preds_redshift = Dense(1, name='redshift_output')(x)
+        # Redshift branch
+        z = Dense(40, activation='relu')(x)
+        z = Dense(40, activation='relu')(z)
+
+        preds_category = Dense(3, activation='softmax', name='category_output')(y)
+        preds_redshift = Dense(1, name='redshift_output')(z)
 
         model = Model(inputs=inputs, outputs=[preds_category, preds_redshift], name='astronet')
 
@@ -90,15 +119,48 @@ class AstroNet(BaseEstimator):
 
         self.network.fit(X, y, validation_data=validation_data, epochs=50, batch_size=64, verbose=1)
 
-    def predict(self, X):
+    def predict(self, X, encoder):
         X = self.scaler.transform(X)
-        return self.network.predict(X)
+        predictions = self.network.predict(X)
+
+        y_pred_proba = predictions[0]
+        z_pred = predictions[1]
+
+        predictions_df = decode_clf_preds(y_pred_proba, encoder)
+        predictions_df['Z_PHOTO'] = z_pred
+        return predictions_df
 
 
-MODEL_CONSTRUCTORS = {
-    'rf-clf': build_rf_clf,
-    'rf-reg': build_rf_reg,
-    'xgb-clf': build_xgb_clf,
-    'ann-clf': build_ann_clf,
-    'astronet': build_astronet,
-}
+# TODO: this should be in a pipeline for non ann models
+def get_single_predictions(model, X, encoder, cfg):
+    if cfg['pred_class']:
+        y_pred_proba = model.predict_proba(X)
+        predictions = decode_clf_preds(y_pred_proba, encoder)
+    else:
+        predictions = pd.DataFrame()
+        predictions['Z_PHOTO'] = model.predict(X)
+    return predictions
+
+
+def decode_clf_preds(y_pred_proba, encoder):
+    predictions_df = pd.DataFrame()
+    for i, c in enumerate(encoder.classes_):
+        predictions_df['{}_PHOTO'.format(c)] = y_pred_proba[:, i]
+    predictions_df['CLASS_PHOTO'] = encoder.inverse_transform(np.argmax(y_pred_proba, axis=1))
+    return predictions_df
+
+
+def get_model_constructor(cfg):
+    constructors = {
+        'rf-class': build_rf_clf,
+        'rf-redshift': build_rf_reg,
+        'xgb-class': build_xgb_clf,
+        'ann-class': AnnClf,
+        'ann-class-redshift': AstroNet,
+    }
+
+    name = cfg['model']
+    if cfg['pred_class']: name += '-class'
+    if cfg['pred_z']: name += '-redshift'
+
+    return constructors[name]

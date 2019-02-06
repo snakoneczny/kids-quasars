@@ -6,7 +6,8 @@ import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
-from utils import BAND_CALIB_COLUMNS, COLOR_COLUMNS, logger, process_kids, process_kids_data
+from utils import logger
+from data import BAND_CALIB_COLUMNS, COLOR_COLUMNS, process_kids, process_kids_data
 
 COLUMNS_TO_ADD = ['RAJ2000', 'DECJ2000', 'CLASS_STAR', BAND_CALIB_COLUMNS, COLOR_COLUMNS]
 
@@ -38,8 +39,8 @@ model_constructor, cfg = parse_config(args.config)
 model = model_constructor(cfg)
 
 # Create data paths
-data_path_train = '/media/snakoneczny/data/KiDS/{data_name}.cols.csv'.format(data_name=cfg['data_name'])
-data_path_pred = '/media/snakoneczny/data/KiDS/{catalog_name}.cols.csv'.format(catalog_name=cfg['catalog_name'])
+data_path_train = '/media/snakoneczny/data/KiDS/{train_data}.cols.csv'.format(train_data=cfg['train_data'])
+data_path_pred = '/media/snakoneczny/data/KiDS/{inference_data}.cols.csv'.format(inference_data=cfg['inference_data'])
 
 # Read and process train data
 data = process_kids(data_path_train, sdss_cleaning=cfg['clean_sdss'], cut=cfg['cut'])

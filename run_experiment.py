@@ -1,18 +1,16 @@
 import datetime
 import argparse
 from config_parser import parse_config
-from functools import partial
-from collections import OrderedDict
-from itertools import chain
 
 import numpy as np
-from sklearn.model_selection import KFold, train_test_split
-from sklearn.metrics import accuracy_score, f1_score, mean_squared_error, mean_absolute_error
+import pandas as pd
+from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
-from sklearn.externals import joblib
 
-from utils import logger, process_kids, get_estimation_type, get_model_type
-from utils_evaluation import metric_class_split
+from utils import logger, save_predictions, save_model
+from data import MAG_GAAP_CALIB_R, process_kids
+from experiments import kfold_validation, top_k_split, do_experiment
+
 
 timestamp_start = datetime.datetime.now().strftime('%Y-%m-%d_%H:%M:%S')
 
@@ -23,30 +21,15 @@ args = parser.parse_args()
 
 model_constructor, cfg = parse_config(args.config)
 model = model_constructor(cfg)
-estimation_type = get_estimation_type(cfg['model'])
-model_type = get_model_type(cfg['model'])
-
-# Define validation metrics
-metrics_classification = OrderedDict([
-    ('accuracy', accuracy_score),
-    ('f1', partial(f1_score, average=None))
-])
-
-metrics_redshift = OrderedDict([
-    ('mean_square_error', mean_squared_error),
-    ('mean_absolute_error', mean_absolute_error),
-    ('mse_classes', partial(metric_class_split, metric=mean_squared_error)),
-    ('mae_classes', partial(metric_class_split, metric=mean_absolute_error)),
-])
 
 # Read data
-data_path = '/media/snakoneczny/data/KiDS/{data_name}.cols.csv'.format(data_name=cfg['data_name'])
-data = process_kids(data_path, sdss_cleaning=cfg['clean_sdss'], cut=cfg['cut'])
+data_path = '/media/snakoneczny/data/KiDS/{train_data}.cols.csv'.format(train_data=cfg['train_data'])
+data = process_kids(data_path, sdss_cleaning=True, cut=cfg['cut'])
 
 # Get X and y
-X = data[cfg['features']].as_matrix()
-y = data['CLASS'].as_matrix()
-z = data['Z'].as_matrix()
+X = data[cfg['features']].values
+y = data['CLASS'].values
+z = data['Z'].values
 
 # Encode class values as integers
 encoder = LabelEncoder()
@@ -57,151 +40,48 @@ y_encoded = encoder.transform(y)
 classes = np.unique(y)
 logger.info('Available classes: {}'.format(np.unique(y, return_counts=True)))
 
-# Train test split
-X_train_val, X_test, y_train_val, y_test, z_train_val, z_test, idx_train_val, idx_test = train_test_split(
-    X, y_encoded, z, data.index, test_size=0.2, random_state=427)
+if cfg['test'] == 'kfold':
+
+    # Train test split
+    X_train_val, X_test, y_train_val, y_test, z_train_val, z_test, idx_train_val, idx_test = train_test_split(
+        X, y_encoded, z, data.index, test_size=0.2, random_state=427)
+
+    # Validation
+    predictions_val, validation_report = kfold_validation(data, model, cfg, encoder,
+                                                          X_train_val, y_train_val, z_train_val, idx_train_val)
+
+    # Testing
+    predictions_test, scores_test, test_report = do_experiment(
+        data, model, cfg, encoder, X_train_val, X_test, y_train_val, y_test, z_train_val, z_test, idx_test)
+
+    # Finish by showing reports
+    logger.info(validation_report)
+    logger.info(test_report)
+
+elif cfg['test'] == 'magnitude':
+
+    # Train test split
+    _, _, X_train, X_test, y_train, y_test, z_train, z_test, idx_train, idx_test = \
+        top_k_split(data[MAG_GAAP_CALIB_R], X, y_encoded, z, data.index, test_size=0.1)
+
+    # Testing
+    predictions_test, scores_test, test_report = do_experiment(
+        data, model, cfg, encoder, X_train, X_test, y_train, y_test, z_train, z_test, idx_test)
+
+    # Finish by showing reports
+    # logger.info(validation_report)
+    logger.info(test_report)
 
 
-def validation(data, X_train_val, y_train_val, z_train_val, idx_train_val):
-    # Store all predictions and scores
-    predictions_df = data.loc[idx_train_val, ['ID', 'CLASS', 'Z']].reset_index(drop=True)
-    scores = {metric_name: [] for metric_name in {**metrics_classification, **metrics_redshift}}
-    # Cross-validation
-    n_folds = 5
-    kf = KFold(n_splits=n_folds)
-    for fold, (train, val) in enumerate(kf.split(X_train_val)):
-        X_train, y_train, z_train = X_train_val[train], y_train_val[train], z_train_val[train]
-        X_val, y_val, z_val = X_train_val[val], y_train_val[val], z_train_val[val]
-        logger.info('fold {}/{}, train: {}, validation: {}'.format(fold + 1, n_folds, train.shape, val.shape))
+elif cfg['test'] == 'redshift':
+    raise Exception('Top redshift testing not implemented')
 
-        # Train a model
-        if estimation_type == 'astronet':
-            model.fit(X_train, {'category_output': y_train, 'redshift_output': z_train},
-                      validation_data=(X_val, {'category_output': y_val, 'redshift_output': z_val}))
-        elif estimation_type == 'clf':
-            model.fit(X_train, y_train)
-        else:
-            assert estimation_type == 'reg'
-            model.fit(X_train, z_train)
-
-        # Predict on validation data
-        if estimation_type == 'astronet':
-            preds_val = model.predict(X_val)
-            y_pred_proba_val = preds_val[0]
-            z_pred_val = preds_val[1]
-        elif estimation_type == 'clf':
-            y_pred_proba_val = model.predict_proba(X_val)
-        else:  # model_type == 'reg':
-            z_pred_val = model.predict(X_val)
-
-        # Get and store classification scores  # TODO: refactor
-        y_val_decoded = encoder.inverse_transform(y_val)
-        if estimation_type in ['astronet', 'clf']:
-
-            # Store prediction in original data order
-            for i, c in enumerate(encoder.classes_):
-                predictions_df.loc[val, c] = y_pred_proba_val[:, i]
-
-            y_pred_val_decoded = encoder.inverse_transform(np.argmax(y_pred_proba_val, axis=1))
-
-            for metric_name, metric_func in metrics_classification.items():
-                score = np.around(metric_func(y_val_decoded, y_pred_val_decoded), 4)
-                scores[metric_name].append(score)
-
-        # Get and store regression scores
-        if estimation_type in ['astronet', 'reg']:
-
-            # Store prediction in original data order
-            predictions_df.loc[val, 'Z_pred'] = z_pred_val
-
-            for metric_name, metric_func in metrics_redshift.items():
-                if metric_name in ['mse_classes', 'mae_classes']:
-                    metric_func = partial(metric_func, classes=y_val_decoded)
-                score = np.around(metric_func(z_val, z_pred_val), 4)
-                scores[metric_name].append(score)
-
-        # Store fold number
-        predictions_df.loc[val, 'fold'] = fold
-
-    # Report validation scores
-    report_lines = []
-    for metric_name in OrderedDict(chain(metrics_classification.items(), metrics_redshift.items())):
-
-        if len(scores[metric_name]) > 0:
-            mean_values = np.around(np.mean(scores[metric_name], axis=0), 4)
-            std_values = np.around(np.std(scores[metric_name], axis=0), 4)
-
-            report_lines.append('Validation {metric_name}: {mean} +/- {std}, values: {values}'.format(
-                metric_name=metric_name, values=scores[metric_name], mean=mean_values, std=std_values))
-
-    return predictions_df, '\n'.join(report_lines)
-
-
-def test(X_train_val, X_test, y_train_val, y_test, z_train_val, z_test):
-    # Train a model
-    if estimation_type == 'astronet':
-        model.fit(X_train_val, {'category_output': y_train_val, 'redshift_output': z_train_val},
-                  validation_data=(X_test, {'category_output': y_test, 'redshift_output': z_test}))
-    elif estimation_type == 'clf':
-        model.fit(X_train_val, y_train_val)
-    else:
-        assert estimation_type == 'reg'
-        model.fit(X_train_val, z_train_val)
-
-    # Predict on test data
-    if estimation_type == 'astronet':
-        preds_test = model.predict(X_test)
-        y_pred_proba_test = preds_test[0]
-        z_pred_test = preds_test[1]
-    elif estimation_type == 'clf':
-        y_pred_proba_test = model.predict_proba(X_test)
-    else:  # model_type == 'reg':
-        z_pred_test = model.predict(X_test)
-
-    # Report test scores
-    y_test_decoded = encoder.inverse_transform(y_test)
-    report_lines = []
-
-    # Classification ones
-    if estimation_type in ['astronet', 'clf']:
-        y_pred_test_decoded = encoder.inverse_transform(np.argmax(y_pred_proba_test, axis=1))
-
-        for metric_name, metric_func in metrics_classification.items():
-            score = np.around(metric_func(y_test_decoded, y_pred_test_decoded), 4)
-            report_lines.append('Test {metric_name}: {score}'.format(metric_name=metric_name, score=score))
-
-    # Regression ones
-    if estimation_type in ['astronet', 'reg']:
-        for metric_name, metric_func in metrics_redshift.items():
-            if metric_name in ['mse_classes', 'mae_classes']:
-                metric_func = partial(metric_func, classes=y_test_decoded)
-            score = np.around(metric_func(z_test, z_pred_test), 4)
-            report_lines.append('Test {metric_name}: {score}'.format(metric_name=metric_name, score=score))
-
-    return '\n'.join(report_lines)
-
-
-# Validation
-predictions_df, validation_report = validation(data, X_train_val, y_train_val, z_train_val, idx_train_val)
-
-# Testing
-test_report = test(X_train_val, X_test, y_train_val, y_test, z_train_val, z_test)
-
-# Finish by showing reports
-logger.info(validation_report)
-logger.info(test_report)
+else:
+    raise Exception('Unknown test method: {}'.format(cfg['test']))
 
 if args.save:
-    # TODO: right now we save only validation predictions, but test should also be saved if we want to report test scores
-    # Save predictions df
-    predictions_path = 'outputs/test_preds/{exp_name}__{timestamp}.csv'.format(exp_name=cfg['exp_name'],
-                                                                               timestamp=timestamp_start)
-    predictions_df.to_csv(predictions_path, index=False)
-    logger.info('predictions saved to: {}'.format(predictions_path))
+    # TODO: make sure all preds are saved
+    predictions_df = pd.concat([predictions_val, predictions_test])
 
-    # TODO: joblib will not work with neural nets probably
-    # Save model
-    model_path = 'outputs/test_models/{exp_name}__{timestamp}.joblib'.format(exp_name=cfg['exp_name'],
-                                                                             timestamp=timestamp_start)
-    joblib.dump(model, model_path)
-    logger.info('model saved to: {}'.format(model_path))
+    save_predictions(predictions_df, timestamp_start, cfg)
+    save_model(model, timestamp_start, cfg)

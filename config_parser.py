@@ -1,7 +1,7 @@
 import yaml
 
-from utils import FEATURES
-from models import MODEL_CONSTRUCTORS
+from data import FEATURES
+from models import get_model_constructor
 
 
 def parse_config(config_file):
@@ -14,7 +14,7 @@ def parse_config(config_file):
     cfg['features'] = FEATURES[cfg['features']]
     cfg['n_features'] = len(cfg['features'])
 
-    model_constructor = MODEL_CONSTRUCTORS[cfg['model']]
+    model_constructor = get_model_constructor(cfg)
 
     return model_constructor, cfg
 
@@ -23,11 +23,8 @@ def add_experiment_name(cfg):
     cfg['exp_name'] = '{model}_f-{features}_cut-{cut}'.format(
         model=cfg['model'], features=cfg['features'], cut=cfg['cut'])
 
-    if cfg['clean_sdss']:
-        cfg['exp_name'] = 'sdss-clean_{exp_name}'.format(exp_name=cfg['exp_name'])
+    train_data = cfg['train_data'].replace('.', '_')
 
-    data_name = cfg['data_name'].replace('.', '_')
-
-    cfg['exp_name'] = '{data_name}_{exp_name}'.format(data_name=data_name, exp_name=cfg['exp_name'])
+    cfg['exp_name'] = '{train_data}_{exp_name}'.format(train_data=train_data, exp_name=cfg['exp_name'])
 
     return cfg
