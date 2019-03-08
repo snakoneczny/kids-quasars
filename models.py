@@ -4,7 +4,7 @@ from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from xgboost import XGBClassifier
 from sklearn.base import BaseEstimator
 from keras.models import Sequential, Model
-from keras.layers import Input, Dense
+from keras.layers import Input, Dense, Dropout
 from keras.optimizers import Adam
 from sklearn.preprocessing import MinMaxScaler
 from keras.utils import np_utils
@@ -40,13 +40,21 @@ class AnnClf(BaseEstimator):
 
     def __create_network(self, params):
         model = Sequential()
-        model.add(Dense(20, input_dim=params['n_features'], activation='relu'))
+        model.add(Dense(40, input_dim=params['n_features'], activation='relu'))
+        model.add(Dense(40, activation='relu'))
+        model.add(Dense(30, activation='relu'))
+        model.add(Dense(30, activation='relu'))
         model.add(Dense(20, activation='relu'))
+        model.add(Dense(20, activation='relu'))
+        model.add(Dense(10, activation='relu'))
+        model.add(Dense(10, activation='relu'))
         model.add(Dense(3, activation='softmax', name='category_output'))
 
         loss = {'category_output': 'categorical_crossentropy'}
 
-        model.compile(loss=loss, optimizer='adam', metrics=['accuracy'])
+        opt = Adam(lr=0.001)
+
+        model.compile(loss=loss, optimizer=opt, metrics=['accuracy'])
 
         return model
 
@@ -58,7 +66,7 @@ class AnnClf(BaseEstimator):
         validation_data = (self.scaler.transform(validation_data[0]),
                            {'category_output': np_utils.to_categorical(validation_data[1]['category_output'])})
 
-        self.network.fit(X, y, validation_data=validation_data, epochs=50, batch_size=64, verbose=1)
+        self.network.fit(X, y, validation_data=validation_data, epochs=50, batch_size=32, verbose=1)
 
     def predict(self, X, encoder):
         X = self.scaler.transform(X)
@@ -117,7 +125,7 @@ class AstroNet(BaseEstimator):
                            {'category_output': np_utils.to_categorical(validation_data[1]['category_output']),
                             'redshift_output': validation_data[1]['redshift_output']})
 
-        self.network.fit(X, y, validation_data=validation_data, epochs=50, batch_size=64, verbose=1)
+        self.network.fit(X, y, validation_data=validation_data, epochs=100, batch_size=32, verbose=1)
 
     def predict(self, X, encoder):
         X = self.scaler.transform(X)
@@ -132,7 +140,7 @@ class AstroNet(BaseEstimator):
 
 
 # TODO: this should be in a pipeline for non ann models
-def get_single_predictions(model, X, encoder, cfg):
+def get_single_problem_predictions(model, X, encoder, cfg):
     if cfg['pred_class']:
         y_pred_proba = model.predict_proba(X)
         predictions = decode_clf_preds(y_pred_proba, encoder)

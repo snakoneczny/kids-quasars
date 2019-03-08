@@ -8,7 +8,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 
 from utils import logger, save_predictions, save_model
-from data import MAG_GAAP_CALIB_R, process_kids
+from data import MAG_GAAP_STR, process_kids
 from experiments import kfold_validation, top_k_split, do_experiment
 
 
@@ -23,8 +23,8 @@ model_constructor, cfg = parse_config(args.config)
 model = model_constructor(cfg)
 
 # Read data
-data_path = '/media/snakoneczny/data/KiDS/{train_data}.cols.csv'.format(train_data=cfg['train_data'])
-data = process_kids(data_path, sdss_cleaning=True, cut=cfg['cut'])
+data_path = '/media/snakoneczny/data/KiDS/DR4/{train_data}.fits'.format(train_data=cfg['train_data'])
+data = process_kids(data_path, bands=cfg['bands'], cut=cfg['cut'], sdss_cleaning=True,)
 
 # Get X and y
 X = data[cfg['features']].values
@@ -54,23 +54,25 @@ if cfg['test'] == 'kfold':
     predictions_test, scores_test, test_report = do_experiment(
         data, model, cfg, encoder, X_train_val, X_test, y_train_val, y_test, z_train_val, z_test, idx_test)
 
+    predictions = pd.concat([predictions_val, predictions_test])
+
     # Finish by showing reports
     logger.info(validation_report)
     logger.info(test_report)
+
 
 elif cfg['test'] == 'magnitude':
 
     # Train test split
     _, _, X_train, X_test, y_train, y_test, z_train, z_test, idx_train, idx_test = \
-        top_k_split(data[MAG_GAAP_CALIB_R], X, y_encoded, z, data.index, test_size=0.1)
+        top_k_split(data[MAG_GAAP_STR.format('r')], X, y_encoded, z, data.index, test_size=0.1)
 
     # Testing
-    predictions_test, scores_test, test_report = do_experiment(
+    predictions, scores, report = do_experiment(
         data, model, cfg, encoder, X_train, X_test, y_train, y_test, z_train, z_test, idx_test)
 
     # Finish by showing reports
-    # logger.info(validation_report)
-    logger.info(test_report)
+    logger.info(report)
 
 
 elif cfg['test'] == 'redshift':
@@ -80,8 +82,5 @@ else:
     raise Exception('Unknown test method: {}'.format(cfg['test']))
 
 if args.save:
-    # TODO: make sure all preds are saved
-    predictions_df = pd.concat([predictions_val, predictions_test])
-
-    save_predictions(predictions_df, timestamp_start, cfg)
+    save_predictions(predictions, timestamp_start, cfg)
     save_model(model, timestamp_start, cfg)

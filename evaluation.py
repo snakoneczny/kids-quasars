@@ -1,12 +1,12 @@
 import os
-from collections.__init__ import defaultdict
+from collections.__init__ import defaultdict, OrderedDict
 
 import seaborn as sns
 from matplotlib import pyplot as plt
 from sklearn.metrics import accuracy_score, f1_score, confusion_matrix, log_loss, roc_curve, auc, precision_score, \
     recall_score, average_precision_score, precision_recall_curve
 
-from data import EXTERNAL_QSO_PATHS, BASE_CLASSES, MAG_GAAP_CALIB_R, BAND_CALIB_COLUMNS, clean_gaia, process_2df
+from data import EXTERNAL_QSO_PATHS, BASE_CLASSES, MAG_GAAP_STR, BAND_COLUMNS_ALL, clean_gaia, process_2df
 from utils import *
 from plotting import plot_confusion_matrix, plot_roc_curve, plot_precision_recall_curve, get_line_style, \
     get_cubehelix_palette
@@ -128,11 +128,11 @@ def metric_class_split(y_true, y_pred, classes, metric):
     return scores
 
 
-def number_counts(data, x_lim=None, title=None, legend_loc='upper left'):
+def number_counts(data, x_lim=None, title=None, legend_loc='upper left', columns=BAND_COLUMNS_ALL):
     # Get x limit from all magnitudes
     if x_lim is None:
-        m_min = int(math.floor(data[BAND_CALIB_COLUMNS].values.min()))
-        m_max = int(math.ceil(data[BAND_CALIB_COLUMNS].values.max()))
+        m_min = int(math.floor(data[columns].values.min()))
+        m_max = int(math.ceil(data[columns].values.max()))
         bins = np.arange(m_min, m_max + 1.0, 1.0)
     else:
         bins = np.arange(x_lim[0], x_lim[1] + 1.0, 1.0)
@@ -141,7 +141,7 @@ def number_counts(data, x_lim=None, title=None, legend_loc='upper left'):
 
     # Plot for every magnitude
     counts = pd.DataFrame()
-    for band in BAND_CALIB_COLUMNS:
+    for band in columns:
 
         # Bin magnitudes
         data['bin'] = pd.cut(data[band], bins, labels=False)
@@ -159,18 +159,19 @@ def number_counts(data, x_lim=None, title=None, legend_loc='upper left'):
     plt.title(title)
 
 
-def number_counts_multidata(data_dict, x_lim, band=MAG_GAAP_CALIB_R, legend_loc='upper left'):
+def number_counts_multidata(data_dict, x_lim, band='r', legend_loc='upper left'):
+    band_column = MAG_GAAP_STR.format(band)
     bins = np.arange(x_lim[0], x_lim[1] + .5, .5)
     bin_titles = ['({}, {}]'.format(bins[i], bins[i + 1]) for i, _ in enumerate(bins[:-1])]
 
     counts = pd.DataFrame()
     for data_name, data in data_dict.items():
-        data['bin'] = pd.cut(data[band], bins, labels=False)
+        data['bin'] = pd.cut(data[band_column], bins, labels=False)
 
         # For each bin
         for i in range(len(bins) - 1):
             data_bin = data.loc[data['bin'] == i]
-            counts = counts.append({'objects': data_bin.shape[0], band: bin_titles[i], 'dataset': data_name},
+            counts = counts.append({'objects': data_bin.shape[0], band_column: bin_titles[i], 'dataset': data_name},
                                    ignore_index=True)
 
     sns.catplot(x=band, y='objects', hue='dataset', data=counts, kind='bar',
@@ -182,8 +183,8 @@ def number_counts_multidata(data_dict, x_lim, band=MAG_GAAP_CALIB_R, legend_loc=
     plt.yscale('log')
 
 
-def number_counts_linear(data, c=10, linear_range=(18, 20)):
-    for b in BAND_CALIB_COLUMNS:
+def number_counts_linear(data, c=10, linear_range=(18, 20), columns=BAND_COLUMNS_ALL):
+    for b in columns:
 
         m_min = int(math.ceil(data[b].min()))
         m_max = int(math.ceil(data[b].max()))
@@ -207,15 +208,15 @@ def number_counts_linear(data, c=10, linear_range=(18, 20)):
 
 
 # nside 58 gives 1.02 sq. deg.
-def number_counts_pixels(data, nside=58, x_lim=None, title=None, legend_loc='upper left'):
+def number_counts_pixels(data, nside=58, x_lim=None, title=None, legend_loc='upper left', columns=BAND_COLUMNS_ALL):
     # Get mask for the whole dataset
     map, _, _ = get_map(data['RAJ2000'], data['DECJ2000'], nside=nside)
     mask_non_zero = np.nonzero(map)
 
     # Get x limit from all magnitudes
     if x_lim is None:
-        m_min = int(math.floor(data[BAND_CALIB_COLUMNS].values.min()))
-        m_max = int(math.ceil(data[BAND_CALIB_COLUMNS].values.max()))
+        m_min = int(math.floor(data[columns].values.min()))
+        m_max = int(math.ceil(data[columns].values.max()))
         bins = np.arange(m_min, m_max + 1.0, 1.0)
     else:
         bins = np.arange(x_lim[0], x_lim[1] + 1.0, 1.0)
@@ -224,7 +225,7 @@ def number_counts_pixels(data, nside=58, x_lim=None, title=None, legend_loc='upp
 
     # Plot for every magnitude
     pixel_densities = pd.DataFrame()
-    for band in BAND_CALIB_COLUMNS:
+    for band in columns:
 
         # Bin magnitudes
         data['bin'] = pd.cut(data[band], bins, labels=False)
@@ -278,8 +279,8 @@ def test_gaia(catalog, catalog_x_gaia_path, class_column='CLASS', id_column='ID'
                                   title='GAIA', save=save)
 
 
-def test_against_external_catalog(ext_catalog, catalog, class_column='CLASS', id_column='ID', title='', plot=True,
-                                  save=False):
+def test_against_external_catalog(ext_catalog, catalog, columns=BAND_COLUMNS_ALL, class_column='CLASS', id_column='ID',
+                                  title='', plot=True, save=False):
     is_in_ext = catalog[id_column].isin(ext_catalog[id_column])
     catalogs_cross = catalog.loc[is_in_ext]
     n_train_in_ext = sum(catalogs_cross['train']) if 'train' in catalogs_cross.columns else 0
@@ -299,7 +300,7 @@ def test_against_external_catalog(ext_catalog, catalog, class_column='CLASS', id
     # Plot class histograms
     if plot:
         if 'MAG_GAAP_CALIB_U' in catalogs_cross.columns:
-            for c in BAND_CALIB_COLUMNS:
+            for c in columns:
                 plt.figure()
                 for t in ['STAR', 'GALAXY', 'QSO']:
                     sns.distplot(catalogs_cross.loc[catalogs_cross['CLASS'] == t][c], label=t, kde=False, rug=False,
@@ -339,7 +340,7 @@ def gaia_motion_analysis(data, norm=False):
             plt.ylabel(class_name)
 
         print('{}:'.format(class_name))
-        display(result_df)
+        print(result_df)
 
 
 def proba_motion_analysis(data_x_gaia, motions=['parallax'], x_lim=(0.3, 1), step=0.02):

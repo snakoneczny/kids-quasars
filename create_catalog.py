@@ -7,9 +7,9 @@ import pandas as pd
 from tqdm import tqdm
 
 from utils import logger
-from data import BAND_CALIB_COLUMNS, COLOR_COLUMNS, process_kids, process_kids_data
+from data import BAND_COLUMNS_ALL, COLOR_COLUMNS, process_kids, process_kids_data
 
-COLUMNS_TO_ADD = ['RAJ2000', 'DECJ2000', 'CLASS_STAR', BAND_CALIB_COLUMNS, COLOR_COLUMNS]
+COLUMNS_TO_ADD = ['RAJ2000', 'DECJ2000', 'CLASS_STAR', BAND_COLUMNS_ALL, COLOR_COLUMNS]
 
 
 def create_catalog_chunk(data_chunk, y_pred_proba, classes):
@@ -39,7 +39,8 @@ model_constructor, cfg = parse_config(args.config)
 model = model_constructor(cfg)
 
 # Create data paths
-data_path_train = '/media/snakoneczny/data/KiDS/{train_data}.cols.csv'.format(train_data=cfg['train_data'])
+data_path_train = '/media/snakoneczny/data/KiDS/DR4/{train_data}.fits'.format(train_data=cfg['train_data'])
+# TODO: inference fits data batch reading
 data_path_pred = '/media/snakoneczny/data/KiDS/{inference_data}.cols.csv'.format(inference_data=cfg['inference_data'])
 
 # Read and process train data

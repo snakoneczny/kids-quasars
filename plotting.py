@@ -9,7 +9,7 @@ import seaborn as sns
 
 from utils import pretty_print_feature, \
     get_external_qso_short_name
-from data import EXTERNAL_QSO_DICT, BASE_CLASSES, BAND_CALIB_COLUMNS, process_2df
+from data import EXTERNAL_QSO_DICT, BASE_CLASSES, BAND_COLUMNS_ALL, process_2df
 
 CUSTOM_COLORS = {
     'QSO': (0.08605633600581403, 0.23824692404212, 0.30561236308077167),
@@ -117,7 +117,7 @@ def plot_precision_recall_curve(precisions, recalls, average_precision, precisio
     plt.title('Precision-Recall curve: AP={0:0.2f}'.format(average_precision))
 
 
-def plot_histograms(data_dict, columns=BAND_CALIB_COLUMNS, x_lim_dict=None, title=None, pretty_print_function=None,
+def plot_histograms(data_dict, columns=BAND_COLUMNS_ALL, x_lim_dict=None, title=None, pretty_print_function=None,
                     legend_loc='upper left', legend_size=None):
     color_palette = get_cubehelix_palette(len(data_dict))
     for column in columns:

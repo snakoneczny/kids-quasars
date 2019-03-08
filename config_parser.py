@@ -20,8 +20,8 @@ def parse_config(config_file):
 
 
 def add_experiment_name(cfg):
-    cfg['exp_name'] = '{model}_f-{features}_cut-{cut}'.format(
-        model=cfg['model'], features=cfg['features'], cut=cfg['cut'])
+    cfg['exp_name'] = '{model}_f-{features}_test-{test}'.format(
+        model=cfg['model'], features=cfg['features'], test=cfg['test'])
 
     train_data = cfg['train_data'].replace('.', '_')
 

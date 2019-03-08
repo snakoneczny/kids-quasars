@@ -9,7 +9,7 @@ from sklearn.metrics import accuracy_score, f1_score, mean_squared_error, mean_a
 
 from utils import logger, safe_indexing
 from evaluation import metric_class_split
-from models import get_single_predictions
+from models import get_single_problem_predictions
 
 # Define validation metrics
 metrics_classification = OrderedDict([
@@ -40,11 +40,14 @@ def do_experiment(data, model, cfg, encoder, X_train, X_test, y_train, y_test, z
     if cfg['model'] == 'ann':
         preds_val = model.predict(X_test, encoder)
     else:
-        preds_val = get_single_predictions(model, X_test, encoder, cfg)
+        preds_val = get_single_problem_predictions(model, X_test, encoder, cfg)
 
     # Store prediction in original data order
-    predictions_df = pd.concat([predictions_df, preds_val], ignore_index=True, axis=1)
-    predictions_df['subset'] = 'test'
+    tmp = pd.concat([predictions_df, preds_val], ignore_index=True, axis=1)
+    tmp['subset'] = 'test'
+
+    predictions_df = pd.concat([predictions_df, preds_val], axis=1)
+    predictions_df['exp_subset'] = 'test'
 
     # Get and store scores
     scores, report = get_scores(y_test, z_test, preds_val, encoder, cfg)
@@ -120,17 +123,16 @@ def get_scores(y_val, z_val, preds_val, encoder, cfg):
     return scores, '\n'.join(report_lines)
 
 
-def top_k_split(*arrays, **options):
+def top_k_split(*arrays, test_size=0.2):
+    """
+    :param arrays: arrays of any format, the first one should be array or Series
+        All arrays are divided based on the values in the first one
+    :param test_size: float (0, 1)
+    :return: list
+    """
     n_arrays = len(arrays)
     if n_arrays == 0:
         raise ValueError('At least one array required as input')
-    test_size = options.pop('test_size', 'default')
-
-    if options:
-        raise TypeError('Invalid parameters passed: %s' % str(options))
-
-    if test_size == 'default':
-        test_size = 0.1
 
     # Make indexable
     arrays = [a for a in arrays]
@@ -140,6 +142,27 @@ def top_k_split(*arrays, **options):
     ind_part = np.argpartition(arrays[0], -1 * k)
     ind_top = ind_part[-1 * k:]
     ind_low = ind_part[:-1 * k]
+
+    return list(chain.from_iterable((safe_indexing(a, ind_low), safe_indexing(a, ind_top)) for a in arrays))
+
+
+def value_split(*arrays, value):
+    """
+    :param arrays: arrays of any format, the first one should be array or Series
+        All arrays are divided based on the values in the first one
+    :param value: float
+    :return: list
+    """
+    n_arrays = len(arrays)
+    if n_arrays == 0:
+        raise ValueError('At least one array required as input')
+
+    # Make indexable
+    arrays = [a for a in arrays]
+
+    # Get top and low index
+    ind_top = np.where(arrays[0] >= value)[0]
+    ind_low = np.where(arrays[0] < value)[0]
 
     return list(chain.from_iterable((safe_indexing(a, ind_low), safe_indexing(a, ind_top)) for a in arrays))
 
