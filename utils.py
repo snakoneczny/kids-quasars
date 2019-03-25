@@ -155,15 +155,15 @@ def describe_column(data):
 
 
 def pretty_print_magnitude(str):
-    return str.split('_')[-1].lower() + ' magnitude'
+    return str.split('_')[-1] + ' magnitude'
 
 
 def pretty_print_mags_combination(str):
     m_1 = str.split('_')[-2]
     m_2 = str.split('_')[-1]
     combination = str.split('_')[0]
-    combination_symbol = {'COLOR': '-', 'RATIO': '/'}[combination]
-    return '{}{}{} {}'.format(m_1, combination_symbol, m_2, combination).lower()
+    combination_symbol = {'COLOUR': '-', 'RATIO': '/'}[combination]
+    return '{}{}{} {}'.format(m_1, combination_symbol, m_2, combination.lower())
 
 
 def pretty_print_feature(str):
@@ -188,8 +188,6 @@ def get_external_qso_short_name(full_name):
 def save_predictions(predictions_df, timestamp_start, cfg):
     predictions_path = 'outputs/exp_preds/{exp_name}__{timestamp}.csv'.format(exp_name=cfg['exp_name'],
                                                                               timestamp=timestamp_start)
-    class_names = np.unique(predictions_df['CLASS'])
-    predictions_df['CLASS_pred'] = predictions_df[class_names].idxmax(axis=1)
     predictions_df.to_csv(predictions_path, index=False)
     logger.info('predictions saved to: {}'.format(predictions_path))
 

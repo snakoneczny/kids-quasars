@@ -81,6 +81,8 @@ elif cfg['test'] == 'redshift':
 else:
     raise Exception('Unknown test method: {}'.format(cfg['test']))
 
+# TODO: plot feature importance of the last model in a standard pyplot window, add argument with_plot, or something
+
 if args.save:
     save_predictions(predictions, timestamp_start, cfg)
     save_model(model, timestamp_start, cfg)

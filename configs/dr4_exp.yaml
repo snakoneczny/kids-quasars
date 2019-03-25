@@ -12,6 +12,6 @@ pred_z: False
 
 bands: [u, g, r, i, Z, Y, J, H, Ks]
 
-features: all
+features: no-u
 
-test: magnitude
+test: kfold

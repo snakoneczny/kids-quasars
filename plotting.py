@@ -295,7 +295,8 @@ def plot_feature_ranking(model, features):
     fig, ax = plt.subplots(figsize=(6, 7))
     ax.barh(range(len(features)), importances[indices], align='center', color=get_cubehelix_palette(1)[0])
     ax.set_yticks(range(len(features)))
-    feature_names = [pretty_print_feature(feature_name) for feature_name in features[indices]]
+
+    feature_names = [pretty_print_feature(feature_name) for feature_name in np.array(features)[indices]]
     ax.set_yticklabels(feature_names)
     ax.invert_yaxis()
     ax.set_xlabel('feature importance (%)')
