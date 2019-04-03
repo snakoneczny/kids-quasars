@@ -6,12 +6,12 @@ cut:
 
 model: rf
 
-pred_class: True
+pred_class: False
 
-pred_z: False
+pred_z: True
 
 bands: [u, g, r, i, Z, Y, J, H, Ks]
 
-features: no-u
+features: all
 
-test: kfold
+test: magnitude

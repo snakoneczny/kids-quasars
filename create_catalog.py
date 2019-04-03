@@ -7,9 +7,9 @@ import pandas as pd
 from tqdm import tqdm
 
 from utils import logger
-from data import BAND_COLUMNS_ALL, COLOR_COLUMNS, process_kids, process_kids_data
+from data import BAND_COLUMNS, COLOR_COLUMNS, process_kids, process_kids_data
 
-COLUMNS_TO_ADD = ['RAJ2000', 'DECJ2000', 'CLASS_STAR', BAND_COLUMNS_ALL, COLOR_COLUMNS]
+COLUMNS_TO_ADD = ['RAJ2000', 'DECJ2000', 'CLASS_STAR', BAND_COLUMNS, COLOR_COLUMNS]
 
 
 def create_catalog_chunk(data_chunk, y_pred_proba, classes):

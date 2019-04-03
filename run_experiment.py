@@ -10,6 +10,7 @@ from sklearn.preprocessing import LabelEncoder
 from utils import logger, save_predictions, save_model
 from data import MAG_GAAP_STR, process_kids
 from experiments import kfold_validation, top_k_split, do_experiment
+from plotting import plot_feature_ranking
 
 
 timestamp_start = datetime.datetime.now().strftime('%Y-%m-%d_%H:%M:%S')
@@ -81,7 +82,8 @@ elif cfg['test'] == 'redshift':
 else:
     raise Exception('Unknown test method: {}'.format(cfg['test']))
 
-# TODO: plot feature importance of the last model in a standard pyplot window, add argument with_plot, or something
+# Plot feature importance of the last model
+plot_feature_ranking(model, cfg['features'])
 
 if args.save:
     save_predictions(predictions, timestamp_start, cfg)

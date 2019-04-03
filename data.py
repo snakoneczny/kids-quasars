@@ -26,40 +26,42 @@ RATIO_GAAP_STR = 'RATIO_GAAP_{}_{}'
 MAGERR_GAAP_STR = 'MAGERR_GAAP_{}'
 FLAG_GAAP_STR = 'FLAG_GAAP_{}'
 
-BANDS_ALL = ['u', 'g', 'r', 'i', 'Z', 'Y', 'J', 'H', 'Ks']
-BAND_PAIRS = [('u', 'g'), ('g', 'r'), ('r', 'i'), ('i', 'Z'), ('Z', 'Y'), ('Y', 'J'), ('J', 'H'), ('H', 'Ks')]
+BANDS = ['u', 'g', 'r', 'i', 'Z', 'Y', 'J', 'H', 'Ks']
+BAND_NEXT_PAIRS = [('u', 'g'), ('g', 'r'), ('r', 'i'), ('i', 'Z'), ('Z', 'Y'), ('Y', 'J'), ('J', 'H'), ('H', 'Ks')]
 
 
-def get_mag_gaap_cols(bands=BANDS_ALL):
+def get_mag_gaap_cols(bands=BANDS):
     return [MAG_GAAP_STR.format(band) for band in bands]
 
 
-def get_color_cols(band_tuples=BAND_PAIRS):
+def get_color_cols(band_tuples=BAND_NEXT_PAIRS):
     return [COLOR_GAAP_STR.format(band_1, band_2) for band_1, band_2 in band_tuples]
 
 
-def get_ratio_cols(band_tuples=BAND_PAIRS):
+def get_ratio_cols(band_tuples=BAND_NEXT_PAIRS):
     return [RATIO_GAAP_STR.format(band_1, band_2) for band_1, band_2 in band_tuples]
 
 
-def get_magerr_gaap_cols(bands=BANDS_ALL):
+def get_magerr_gaap_cols(bands=BANDS):
     return [MAGERR_GAAP_STR.format(band) for band in bands]
 
 
-def get_flags_gaap_cols(bands=BANDS_ALL):
+def get_flags_gaap_cols(bands=BANDS):
     return [FLAG_GAAP_STR.format(band) for band in bands]
 
 
-BAND_COLUMNS_ALL = get_mag_gaap_cols(BANDS_ALL)
-COLOR_COLUMNS = get_color_cols(BAND_PAIRS)
-RATIO_COLUMNS = get_ratio_cols(BAND_PAIRS)
-FLAGS_GAAP_COLUMNS_ALL = get_flags_gaap_cols(BANDS_ALL)
+def get_all_pairs(bands):
+    pairs = []
+    for i in range(len(bands)):
+        for j in range(i + 1, len(bands)):
+            pairs.append((bands[i], bands[j]))
+    return pairs
 
-COLOR_PAIRS = [
-    (COLOR_GAAP_STR.format('u', 'g'), COLOR_GAAP_STR.format('g', 'r')),
-    (COLOR_GAAP_STR.format('g', 'r'), COLOR_GAAP_STR.format('r', 'i')),
-    (COLOR_GAAP_STR.format('u', 'g'), COLOR_GAAP_STR.format('r', 'i')),
-]
+
+BAND_COLUMNS = get_mag_gaap_cols(BANDS)
+COLOR_COLUMNS = get_color_cols(get_all_pairs(BANDS))
+RATIO_COLUMNS = get_ratio_cols(get_all_pairs(BANDS))
+FLAGS_GAAP_COLUMNS = get_flags_gaap_cols(BANDS)
 
 
 def get_band_features(bands):
@@ -71,13 +73,12 @@ def get_band_features(bands):
 
 
 FEATURES = {
-    # DR4
-    'all': BAND_COLUMNS_ALL + COLOR_COLUMNS + RATIO_COLUMNS + ['CLASS_STAR'],
-    'no-u': get_band_features(['g', 'r', 'i', 'Z', 'Y', 'J', 'H', 'Ks']) + ['CLASS_STAR'],
+    'all': BAND_COLUMNS + COLOR_COLUMNS + RATIO_COLUMNS + ['CLASS_STAR', 'SG2DPHOT_4'],
+    'no-u': get_band_features(['g', 'r', 'i', 'Z', 'Y', 'J', 'H', 'Ks']) + ['CLASS_STAR', 'SG2DPHOT_4'],
 }
 
 
-def process_kids(path, bands=BANDS_ALL, sdss_cleaning=False, cut=None, n=None, with_print=True):
+def process_kids(path, bands=BANDS, sdss_cleaning=False, cut=None, n=None, with_print=True):
     skiprows = get_skiprows(path, n) if n is not None else None
 
     extension = path.split('.')[-1]
@@ -96,8 +97,8 @@ def read_fits_to_pandas(filepath, columns=None):
 
     # Limit table to useful columns and check if SDSS columns are present from cross-matching
     if columns is None:
-        columns_errors = ['MAGERR_GAAP_{}'.format(band) for band in BANDS_ALL]
-        columns = COLUMNS_KIDS + BAND_COLUMNS_ALL + COLOR_COLUMNS + columns_errors + FLAGS_GAAP_COLUMNS_ALL + [
+        columns_errors = ['MAGERR_GAAP_{}'.format(band) for band in BANDS]
+        columns = COLUMNS_KIDS + BAND_COLUMNS + COLOR_COLUMNS + columns_errors + FLAGS_GAAP_COLUMNS + [
             'IMAFLAGS_ISO']
         if COLUMNS_SDSS[0] in table.columns:
             columns += COLUMNS_SDSS
@@ -108,10 +109,13 @@ def read_fits_to_pandas(filepath, columns=None):
     table['CLASS'] = table['CLASS'].apply(lambda x: x.decode('UTF-8').strip())
     table['ID'] = table['ID'].apply(lambda x: x.decode('UTF-8').strip())
 
+    # Change type to work with it as with a bit map
+    table['IMAFLAGS_ISO'] = table['IMAFLAGS_ISO'].astype(int)  # TODO: why? was okay earlier
+
     return table
 
 
-def process_kids_data(data, bands=BANDS_ALL, cut=None, sdss_cleaning=False, with_print=True):
+def process_kids_data(data, bands=BANDS, cut=None, sdss_cleaning=False, with_print=True):
     if with_print: print('Data shape: {}'.format(data.shape))
 
     data = clean_kids(data, bands=bands, with_print=with_print)
@@ -122,7 +126,9 @@ def process_kids_data(data, bands=BANDS_ALL, cut=None, sdss_cleaning=False, with
     if cut:
         data = CUT_FUNCTIONS[cut](data, with_print=with_print)
 
+    data = add_colors(data)
     data = add_magnitude_ratio(data)
+    data = process_sg2dphot(data)
 
     return data.reset_index(drop=True)
 
@@ -149,7 +155,7 @@ def add_sdss_info(data, sdss_path):
     return data, data_sdss
 
 
-def clean_kids(data, bands=BANDS_ALL, with_print=True):
+def clean_kids(data, bands=BANDS, with_print=True):
     # Drop NANs
     band_columns = get_mag_gaap_cols(bands)
     data_no_na = data.dropna(subset=band_columns).reset_index(drop=True)
@@ -225,11 +231,36 @@ CUT_FUNCTIONS = {
 }
 
 
+def add_colors(data):
+    band_pairs = get_all_pairs(BANDS)
+    for band_x, band_y in band_pairs:
+        column_x = MAG_GAAP_STR.format(band_x)
+        column_y = MAG_GAAP_STR.format(band_y)
+        color_str = COLOR_GAAP_STR.format(band_x, band_y)
+        if color_str not in data.columns:
+            data[color_str] = data[column_x] - data[column_y]
+    return data
+
+
 def add_magnitude_ratio(data):
-    for band_x, band_y in BAND_PAIRS:
+    band_pairs = get_all_pairs(BANDS)
+    for band_x, band_y in band_pairs:
         column_x = MAG_GAAP_STR.format(band_x)
         column_y = MAG_GAAP_STR.format(band_y)
         data[RATIO_GAAP_STR.format(band_x, band_y)] = data[column_x] / data[column_y]
+    return data
+
+
+def process_sg2dphot(data):
+    # 0 = all other sources (e.g. including galaxies).
+    # 1 = high confidence star candidate;
+    # 2 = unreliable source (e.g. cosmic ray);
+    # 4 = star according to star/galaxy separation criteria;
+    # Sources identified as stars can thus have a flag value of 1, 4 or 5.
+    data.loc[:, 'SG2DPHOT'] = data['SG2DPHOT'].astype(int)
+    data.loc[:, 'SG2DPHOT_1'] = data['SG2DPHOT'] & 0b001
+    data.loc[:, 'SG2DPHOT_2'] = data['SG2DPHOT'] & 0b010
+    data.loc[:, 'SG2DPHOT_4'] = data['SG2DPHOT'] & 0b100
     return data
 
 

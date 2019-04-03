@@ -7,7 +7,7 @@ from matplotlib import pyplot as plt
 from sklearn.metrics import accuracy_score, f1_score, confusion_matrix, log_loss, roc_curve, auc, precision_score, \
     recall_score, average_precision_score, precision_recall_curve, mean_absolute_error, mean_squared_error
 
-from data import EXTERNAL_QSO_PATHS, BASE_CLASSES, MAG_GAAP_STR, BAND_COLUMNS_ALL, clean_gaia, process_2df
+from data import EXTERNAL_QSO_PATHS, BASE_CLASSES, MAG_GAAP_STR, BAND_COLUMNS, clean_gaia, process_2df
 from utils import *
 from plotting import plot_confusion_matrix, plot_roc_curve, plot_precision_recall_curve, get_line_style, \
     get_cubehelix_palette
@@ -151,7 +151,7 @@ def redshift_report(predictions, z_max=None):
     # Calculate errors in redshift bins
     predictions.loc[:, 'binned'] = pd.cut(predictions['Z'], bin_edges)
     predictions.loc[:, 'residual'] = abs(predictions['Z'] - predictions['Z_PHOTO'])
-    predictions.loc[:, 'residual_sqr'] = predictions['Z'] - predictions['Z_PHOTO'] ** 2
+    predictions.loc[:, 'residual_sqr'] = (predictions['Z'] - predictions['Z_PHOTO']) ** 2
 
     mae_dict, mse_dict, size_dict = {}, {}, {}
     for i, c in enumerate(classes):
@@ -293,7 +293,7 @@ def metric_class_split(y_true, y_pred, classes, metric):
     return scores
 
 
-def number_counts(data, x_lim=None, title=None, legend_loc='upper left', columns=BAND_COLUMNS_ALL):
+def number_counts(data, x_lim=None, title=None, legend_loc='upper left', columns=BAND_COLUMNS):
     # Get x limit from all magnitudes
     if x_lim is None:
         m_min = int(math.floor(data[columns].values.min()))
@@ -348,7 +348,7 @@ def number_counts_multidata(data_dict, x_lim, band='r', legend_loc='upper left')
     plt.yscale('log')
 
 
-def number_counts_linear(data, c=10, linear_range=(18, 20), columns=BAND_COLUMNS_ALL):
+def number_counts_linear(data, c=10, linear_range=(18, 20), columns=BAND_COLUMNS):
     for b in columns:
 
         m_min = int(math.ceil(data[b].min()))
@@ -373,7 +373,7 @@ def number_counts_linear(data, c=10, linear_range=(18, 20), columns=BAND_COLUMNS
 
 
 # nside 58 gives 1.02 sq. deg.
-def number_counts_pixels(data, nside=58, x_lim=None, title=None, legend_loc='upper left', columns=BAND_COLUMNS_ALL):
+def number_counts_pixels(data, nside=58, x_lim=None, title=None, legend_loc='upper left', columns=BAND_COLUMNS):
     # Get mask for the whole dataset
     map, _, _ = get_map(data['RAJ2000'], data['DECJ2000'], nside=nside)
     mask_non_zero = np.nonzero(map)
@@ -444,7 +444,7 @@ def test_gaia(catalog, catalog_x_gaia_path, class_column='CLASS', id_column='ID'
                                   title='GAIA', save=save)
 
 
-def test_against_external_catalog(ext_catalog, catalog, columns=BAND_COLUMNS_ALL, class_column='CLASS', id_column='ID',
+def test_against_external_catalog(ext_catalog, catalog, columns=BAND_COLUMNS, class_column='CLASS', id_column='ID',
                                   title='', plot=True, save=False):
     is_in_ext = catalog[id_column].isin(ext_catalog[id_column])
     catalogs_cross = catalog.loc[is_in_ext]

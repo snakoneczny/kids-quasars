@@ -171,8 +171,10 @@ def pretty_print_feature(str):
         return 'stellarity index'
     elif str.startswith('MAG'):
         return pretty_print_magnitude(str)
-    else:
+    elif str.startswith('COLOUR') or str.startswith('RATIO'):
         return pretty_print_mags_combination(str)
+    else:
+        return str
 
 
 def get_external_qso_short_name(full_name):
