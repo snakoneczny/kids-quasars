@@ -4,7 +4,7 @@ from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from xgboost import XGBClassifier
 from sklearn.base import BaseEstimator
 from keras.models import Sequential, Model
-from keras.layers import Input, Dense, Dropout
+from keras.layers import Input, Dense
 from keras.optimizers import Adam
 from sklearn.preprocessing import MinMaxScaler
 from keras.utils import np_utils

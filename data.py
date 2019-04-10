@@ -20,34 +20,53 @@ BASE_CLASSES = ['QSO', 'STAR', 'GALAXY']
 COLUMNS_KIDS = ['ID', 'RAJ2000', 'DECJ2000', 'Flag', 'CLASS_STAR', 'SG2DPHOT']
 COLUMNS_SDSS = ['CLASS', 'SUBCLASS', 'Z', 'Z_ERR', 'ZWARNING']
 
-MAG_GAAP_STR = 'MAG_GAAP_{}'
-COLOR_GAAP_STR = 'COLOUR_GAAP_{}_{}'
-RATIO_GAAP_STR = 'RATIO_GAAP_{}_{}'
-MAGERR_GAAP_STR = 'MAGERR_GAAP_{}'
-FLAG_GAAP_STR = 'FLAG_GAAP_{}'
+
+def get_mag_str(band):
+    return 'MAG_GAAP_{}'.format(band)
+
+
+def get_color_str(band_1, band_2):
+    return 'COLOUR_GAAP_{}_{}'.format(band_1, band_2)
+
+
+def get_ratio_str(band_1, band_2):
+    return 'RATIO_GAAP_{}_{}'.format(band_1, band_2)
+
+
+def get_magerr_str(band):
+    return 'MAGERR_GAAP_{}'.format(band)
+
+
+def get_flag_gaap_str(band):
+    return 'FLAG_GAAP_{}'.format(band)
+
 
 BANDS = ['u', 'g', 'r', 'i', 'Z', 'Y', 'J', 'H', 'Ks']
 BAND_NEXT_PAIRS = [('u', 'g'), ('g', 'r'), ('r', 'i'), ('i', 'Z'), ('Z', 'Y'), ('Y', 'J'), ('J', 'H'), ('H', 'Ks')]
 
 
 def get_mag_gaap_cols(bands=BANDS):
-    return [MAG_GAAP_STR.format(band) for band in bands]
+    return [get_mag_str(band) for band in bands]
 
 
 def get_color_cols(band_tuples=BAND_NEXT_PAIRS):
-    return [COLOR_GAAP_STR.format(band_1, band_2) for band_1, band_2 in band_tuples]
+    return [get_color_str(band_1, band_2) for band_1, band_2 in band_tuples]
 
 
 def get_ratio_cols(band_tuples=BAND_NEXT_PAIRS):
-    return [RATIO_GAAP_STR.format(band_1, band_2) for band_1, band_2 in band_tuples]
+    return [get_ratio_str.format(band_1, band_2) for band_1, band_2 in band_tuples]
 
 
 def get_magerr_gaap_cols(bands=BANDS):
-    return [MAGERR_GAAP_STR.format(band) for band in bands]
+    return [get_magerr_str(band) for band in bands]
 
 
 def get_flags_gaap_cols(bands=BANDS):
-    return [FLAG_GAAP_STR.format(band) for band in bands]
+    return [get_flag_gaap_str(band) for band in bands]
+
+
+def get_next_pairs(bands):
+    return [(bands[i], bands[i + 1]) for i in range(len(bands) - 1)]
 
 
 def get_all_pairs(bands):
@@ -60,6 +79,7 @@ def get_all_pairs(bands):
 
 BAND_COLUMNS = get_mag_gaap_cols(BANDS)
 COLOR_COLUMNS = get_color_cols(get_all_pairs(BANDS))
+COLOR_NEXT_COLUMNS = get_color_cols(get_next_pairs(BANDS))
 RATIO_COLUMNS = get_ratio_cols(get_all_pairs(BANDS))
 FLAGS_GAAP_COLUMNS = get_flags_gaap_cols(BANDS)
 
@@ -98,7 +118,7 @@ def read_fits_to_pandas(filepath, columns=None):
     # Limit table to useful columns and check if SDSS columns are present from cross-matching
     if columns is None:
         columns_errors = ['MAGERR_GAAP_{}'.format(band) for band in BANDS]
-        columns = COLUMNS_KIDS + BAND_COLUMNS + COLOR_COLUMNS + columns_errors + FLAGS_GAAP_COLUMNS + [
+        columns = COLUMNS_KIDS + BAND_COLUMNS + COLOR_NEXT_COLUMNS + columns_errors + FLAGS_GAAP_COLUMNS + [
             'IMAFLAGS_ISO']
         if COLUMNS_SDSS[0] in table.columns:
             columns += COLUMNS_SDSS
@@ -106,7 +126,8 @@ def read_fits_to_pandas(filepath, columns=None):
     table = table[columns].to_pandas()
 
     # Binary string don't work with scikit metrics
-    table['CLASS'] = table['CLASS'].apply(lambda x: x.decode('UTF-8').strip())
+    if 'CLASS' in table:
+        table['CLASS'] = table['CLASS'].apply(lambda x: x.decode('UTF-8').strip())
     table['ID'] = table['ID'].apply(lambda x: x.decode('UTF-8').strip())
 
     # Change type to work with it as with a bit map
@@ -214,13 +235,13 @@ def clean_kids(data, bands=BANDS, with_print=True):
 
 
 def cut_r(data, with_print=True):
-    data_cut = data.loc[data[MAG_GAAP_STR.format('r')] < 22].reset_index(drop=True)
+    data_cut = data.loc[data[get_mag_str('r')] < 22].reset_index(drop=True)
     if with_print: print('Removing R > 22: {} left'.format(data_cut.shape[0]))
     return data_cut
 
 
 def cut_u_g(data, with_print=True):
-    data_cut = data.loc[data[COLOR_GAAP_STR.format('u', 'g')] > 0].reset_index(drop=True)
+    data_cut = data.loc[data[get_color_str('u', 'g')] > 0].reset_index(drop=True)
     if with_print: print('Removing U-G < 0: {} left'.format(data_cut.shape[0]))
     return data_cut
 
@@ -234,9 +255,9 @@ CUT_FUNCTIONS = {
 def add_colors(data):
     band_pairs = get_all_pairs(BANDS)
     for band_x, band_y in band_pairs:
-        column_x = MAG_GAAP_STR.format(band_x)
-        column_y = MAG_GAAP_STR.format(band_y)
-        color_str = COLOR_GAAP_STR.format(band_x, band_y)
+        column_x = get_mag_str(band_x)
+        column_y = get_mag_str(band_y)
+        color_str = get_color_str(band_x, band_y)
         if color_str not in data.columns:
             data[color_str] = data[column_x] - data[column_y]
     return data
@@ -245,9 +266,9 @@ def add_colors(data):
 def add_magnitude_ratio(data):
     band_pairs = get_all_pairs(BANDS)
     for band_x, band_y in band_pairs:
-        column_x = MAG_GAAP_STR.format(band_x)
-        column_y = MAG_GAAP_STR.format(band_y)
-        data[RATIO_GAAP_STR.format(band_x, band_y)] = data[column_x] / data[column_y]
+        column_x = get_mag_str(band_x)
+        column_y = get_mag_str(band_y)
+        data[get_ratio_str(band_x, band_y)] = data[column_x] / data[column_y]
     return data
 
 
