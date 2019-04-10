@@ -285,24 +285,29 @@ def plot_external_qso_size(data):
     plt.legend()
 
 
-# TODO: nicer plot
 def plot_feature_ranking(model, features):
     importances = model.feature_importances_ * 100
-    # TODO: no std because it's too big
+    # no std because it's too big
     # std = np.std([tree.feature_importances_ for tree in model.estimators_], axis=0)
     indices = np.argsort(importances)[::-1]
 
-    fig, ax = plt.subplots(figsize=(6, 7))
-    ax.barh(range(len(features)), importances[indices], align='center', color=get_cubehelix_palette(1)[0])
-    ax.set_yticks(range(len(features)))
+    max_features = 40
+    if len(features) > max_features:
+        indices = indices[:max_features]
 
-    feature_names = [pretty_print_feature(feature_name) for feature_name in np.array(features)[indices]]
+    features_sorted = np.array(features)[indices]
+    importances_sorted = np.array(importances)[indices]
+
+    fig, ax = plt.subplots(figsize=(6, 7))
+    ax.barh(range(len(features_sorted)), importances_sorted, align='center', color=get_cubehelix_palette(1)[0])
+    ax.set_yticks(range(len(features_sorted)))
+
+    feature_names = [pretty_print_feature(feature_name) for feature_name in np.array(features_sorted)]
     ax.set_yticklabels(feature_names)
     ax.invert_yaxis()
     ax.set_xlabel('feature importance (%)')
 
-    # TODO
-    for i, value in enumerate(importances[indices]):
+    for i, value in enumerate(importances_sorted):
         offset = -5.0 if i == 0 else .35
         color = 'white' if i == 0 else 'black'
         ax.text(value + offset, i + .2, '{:.2f}%'.format(value), color=color)

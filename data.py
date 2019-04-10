@@ -54,7 +54,7 @@ def get_color_cols(band_tuples=BAND_NEXT_PAIRS):
 
 
 def get_ratio_cols(band_tuples=BAND_NEXT_PAIRS):
-    return [get_ratio_str.format(band_1, band_2) for band_1, band_2 in band_tuples]
+    return [get_ratio_str(band_1, band_2) for band_1, band_2 in band_tuples]
 
 
 def get_magerr_gaap_cols(bands=BANDS):

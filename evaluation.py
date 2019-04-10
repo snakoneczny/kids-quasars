@@ -7,7 +7,7 @@ from matplotlib import pyplot as plt
 from sklearn.metrics import accuracy_score, f1_score, confusion_matrix, log_loss, roc_curve, auc, precision_score, \
     recall_score, average_precision_score, precision_recall_curve, mean_absolute_error, mean_squared_error
 
-from data import EXTERNAL_QSO_PATHS, BASE_CLASSES, MAG_GAAP_STR, BAND_COLUMNS, clean_gaia, process_2df
+from data import EXTERNAL_QSO_PATHS, BASE_CLASSES, BAND_COLUMNS, get_mag_str, clean_gaia, process_2df
 from utils import *
 from plotting import plot_confusion_matrix, plot_roc_curve, plot_precision_recall_curve, get_line_style, \
     get_cubehelix_palette
@@ -325,7 +325,7 @@ def number_counts(data, x_lim=None, title=None, legend_loc='upper left', columns
 
 
 def number_counts_multidata(data_dict, x_lim, band='r', legend_loc='upper left'):
-    band_column = MAG_GAAP_STR.format(band)
+    band_column = get_mag_str(band)
     bins = np.arange(x_lim[0], x_lim[1] + .5, .5)
     bin_titles = ['({}, {}]'.format(bins[i], bins[i + 1]) for i, _ in enumerate(bins[:-1])]
 

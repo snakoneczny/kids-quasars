@@ -8,7 +8,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 
 from utils import logger, save_predictions, save_model
-from data import MAG_GAAP_STR, process_kids
+from data import get_mag_str, process_kids
 from experiments import kfold_validation, top_k_split, do_experiment
 from plotting import plot_feature_ranking
 
@@ -66,7 +66,7 @@ elif cfg['test'] == 'magnitude':
 
     # Train test split
     _, _, X_train, X_test, y_train, y_test, z_train, z_test, idx_train, idx_test = \
-        top_k_split(data[MAG_GAAP_STR.format('r')], X, y_encoded, z, data.index, test_size=0.1)
+        top_k_split(data[get_mag_str('r')], X, y_encoded, z, data.index, test_size=0.1)
 
     # Testing
     predictions, scores, report = do_experiment(

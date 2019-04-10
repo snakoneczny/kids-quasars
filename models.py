@@ -19,7 +19,7 @@ def build_rf_clf(params):
 
 def build_rf_reg(params):
     return RandomForestRegressor(
-        n_estimators=100, random_state=491237, n_jobs=12,
+        n_estimators=400, random_state=491237, n_jobs=12,
     )
 
 
