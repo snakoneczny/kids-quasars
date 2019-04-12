@@ -4,9 +4,9 @@ inference_data: KiDS.DR4.merged
 
 cut:
 
-model: rf
+model: ann
 
-pred_class: False
+pred_class: True
 
 pred_z: True
 

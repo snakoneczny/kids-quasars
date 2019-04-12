@@ -170,9 +170,9 @@ def value_split(*arrays, value):
 def build_ann_output_dict(y, z, cfg):
     outputs = {}
     if cfg['pred_class']:
-        outputs['category_output'] = y
+        outputs['category'] = y
     if cfg['pred_z']:
-        outputs['redshift_output'] = z
+        outputs['redshift'] = z
     return outputs
 
 

@@ -1,13 +1,13 @@
-import datetime
 import argparse
-from config_parser import parse_config
+from config_parser import get_config
 
 import numpy as np
 import pandas as pd
 from tqdm import tqdm
 
-from utils import logger
+from utils import logger, save_catalog
 from data import BAND_COLUMNS, COLOR_COLUMNS, process_kids, process_kids_data
+from models import get_model
 
 COLUMNS_TO_ADD = ['RAJ2000', 'DECJ2000', 'CLASS_STAR', BAND_COLUMNS, COLOR_COLUMNS]
 
@@ -28,15 +28,13 @@ def create_catalog_chunk(data_chunk, y_pred_proba, classes):
     return catalog_chunk
 
 
-timestamp_start = datetime.datetime.now().strftime('%Y-%m-%d_%H:%M:%S')
-
 parser = argparse.ArgumentParser()
-parser.add_argument('-c', '--config', dest='config', required=True, help='config file name')
+parser.add_argument('-c', '--config', dest='config_file', required=True, help='config file name')
 parser.add_argument('-s', '--save', dest='save', action='store_true', help='flag for catalog saving')
 args = parser.parse_args()
 
-model_constructor, cfg = parse_config(args.config)
-model = model_constructor(cfg)
+cfg = get_config(args)
+model = get_model(cfg)
 
 # Create data paths
 data_path_train = '/media/snakoneczny/data/KiDS/DR4/{train_data}.fits'.format(train_data=cfg['train_data'])
@@ -70,10 +68,7 @@ for data_chunk in tqdm(pd.read_csv(data_path_pred, chunksize=4000000), desc='Inf
 
 logger.info('catalog size: {}'.format(catalog_df.shape))
 
-# TODO: make sure galactic coordinates are being saved as well
+# TODO: save galactic coordinates
 # Save catalog
 if args.save:
-    catalog_path = 'outputs/catalogs/{exp_name}__{timestamp}.csv'.format(exp_name=cfg['exp_name'],
-                                                                         timestamp=timestamp_start)
-    catalog_df.to_csv(catalog_path, index=False)
-    logger.info('catalog saved to: {}'.format(catalog_path))
+    save_catalog(catalog_df, exp_name=cfg['exp_name'], timestamp=cfg['timestamp_start'])

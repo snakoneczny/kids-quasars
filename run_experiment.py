@@ -1,6 +1,5 @@
-import datetime
 import argparse
-from config_parser import parse_config
+from config_parser import get_config
 
 import numpy as np
 import pandas as pd
@@ -11,17 +10,17 @@ from utils import logger, save_predictions, save_model
 from data import get_mag_str, process_kids
 from experiments import kfold_validation, top_k_split, do_experiment
 from plotting import plot_feature_ranking
+from models import get_model
 
-
-timestamp_start = datetime.datetime.now().strftime('%Y-%m-%d_%H:%M:%S')
 
 parser = argparse.ArgumentParser()
-parser.add_argument('-c', '--config', dest='config', required=True, help='config file name')
+parser.add_argument('-c', '--config', dest='config_file', required=True, help='config file name')
 parser.add_argument('-s', '--save', dest='save', action='store_true', help='flag for predictions saving')
+parser.add_argument('-t', '--tag', dest='tag', help='experiment tag, added to logs name')
 args = parser.parse_args()
 
-model_constructor, cfg = parse_config(args.config)
-model = model_constructor(cfg)
+cfg = get_config(args)
+model = get_model(cfg)
 
 # Read data
 data_path = '/media/snakoneczny/data/KiDS/DR4/{train_data}.fits'.format(train_data=cfg['train_data'])
@@ -83,8 +82,9 @@ else:
     raise Exception('Unknown test method: {}'.format(cfg['test']))
 
 # Plot feature importance of the last model
-plot_feature_ranking(model, cfg['features'])
+if cfg['model'] == 'rf':
+    plot_feature_ranking(model, cfg['features'])
 
 if args.save:
-    save_predictions(predictions, timestamp_start, cfg)
-    save_model(model, timestamp_start, cfg)
+    save_predictions(predictions, exp_name=cfg['exp_name'], timestamp=cfg['timestamp_start'])
+    save_model(model, exp_name=cfg['exp_name'], timestamp=cfg['timestamp_start'])

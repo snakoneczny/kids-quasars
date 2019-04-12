@@ -187,16 +187,23 @@ def get_external_qso_short_name(full_name):
     return short_names[full_name]
 
 
-def save_predictions(predictions_df, timestamp_start, cfg):
-    predictions_path = 'outputs/exp_preds/{exp_name}__{timestamp}.csv'.format(exp_name=cfg['exp_name'],
-                                                                              timestamp=timestamp_start)
+def save_predictions(predictions_df, exp_name, timestamp):
+    predictions_path = 'outputs/exp_preds/{exp_name}__{timestamp}.csv'.format(exp_name=exp_name,
+                                                                              timestamp=timestamp)
     predictions_df.to_csv(predictions_path, index=False)
     logger.info('predictions saved to: {}'.format(predictions_path))
 
 
-def save_model(model, timestamp_start, cfg):
+def save_model(model, exp_name, timestamp):
     # TODO: neural net saving
-    model_path = 'outputs/exp_models/{exp_name}__{timestamp}.joblib'.format(exp_name=cfg['exp_name'],
-                                                                            timestamp=timestamp_start)
+    model_path = 'outputs/exp_models/{exp_name}__{timestamp}.joblib'.format(exp_name=exp_name,
+                                                                            timestamp=timestamp)
     joblib.dump(model, model_path)
     logger.info('model saved to: {}'.format(model_path))
+
+
+def save_catalog(catalog, exp_name, timestamp):
+    catalog_path = 'outputs/catalogs/{exp_name}__{timestamp}.csv'.format(exp_name=exp_name,
+                                                                         timestamp=timestamp)
+    catalog.to_csv(catalog_path, index=False)
+    logger.info('catalog saved to: {}'.format(catalog_path))

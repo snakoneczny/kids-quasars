@@ -1,22 +1,23 @@
 import yaml
+import datetime
 
 from data import FEATURES
-from models import get_model_constructor
 
 
-def parse_config(config_file):
-    with open(config_file, 'r') as config_file:
-        cfg = yaml.load(config_file)
+def get_config(args):
+    cfg = vars(args).copy()
+
+    with open(cfg['config_file'], 'r') as config_file:
+        cfg.update(yaml.load(config_file))
 
     cfg = add_experiment_name(cfg)
+    cfg['timestamp_start'] = datetime.datetime.now().strftime('%Y-%m-%d_%H:%M:%S')
 
     # Get features from a general feature subset name
     cfg['features'] = FEATURES[cfg['features']]
     cfg['n_features'] = len(cfg['features'])
 
-    model_constructor = get_model_constructor(cfg)
-
-    return model_constructor, cfg
+    return cfg
 
 
 def add_experiment_name(cfg):

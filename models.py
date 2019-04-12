@@ -7,7 +7,9 @@ from keras.models import Sequential, Model
 from keras.layers import Input, Dense
 from keras.optimizers import Adam
 from sklearn.preprocessing import MinMaxScaler
+from keras import backend as K
 from keras.utils import np_utils
+from keras.callbacks import TensorBoard, EarlyStopping, ReduceLROnPlateau
 
 
 def build_rf_clf(params):
@@ -48,9 +50,9 @@ class AnnClf(BaseEstimator):
         model.add(Dense(20, activation='relu'))
         model.add(Dense(10, activation='relu'))
         model.add(Dense(10, activation='relu'))
-        model.add(Dense(3, activation='softmax', name='category_output'))
+        model.add(Dense(3, activation='softmax', name='category'))
 
-        loss = {'category_output': 'categorical_crossentropy'}
+        loss = {'category': 'categorical_crossentropy'}
 
         opt = Adam(lr=0.001)
 
@@ -60,11 +62,11 @@ class AnnClf(BaseEstimator):
 
     def fit(self, X, y, validation_data=None):
         X = self.scaler.fit_transform(X)
-        y['category_output'] = np_utils.to_categorical(y['category_output'])
+        y['category'] = np_utils.to_categorical(y['category'])
         self.network = self.__create_network(self.params)
 
         validation_data = (self.scaler.transform(validation_data[0]),
-                           {'category_output': np_utils.to_categorical(validation_data[1]['category_output'])})
+                           {'category': np_utils.to_categorical(validation_data[1]['category'])})
 
         self.network.fit(X, y, validation_data=validation_data, epochs=50, batch_size=32, verbose=1)
 
@@ -79,8 +81,22 @@ class AstroNet(BaseEstimator):
 
     def __init__(self, params):
         self.params = params
-        self.scaler = MinMaxScaler()
         self.network = None
+        self.scaler = MinMaxScaler()
+        self.batch_size = 32
+        self.lr = 0.001
+
+        logs_name = 'lr={}, bs={}, {}'.format(self.lr, self.batch_size, params['timestamp_start'].replace('_', ' '))
+        if params['tag']:
+            logs_name = '{}, {}'.format(params['tag'], logs_name)
+
+        # TODO: activations
+        tensorboard = CustomTensorBoard(log_dir='./log_ann/{}'.format(logs_name))
+        # early_stopping = EarlyStopping(monitor='val_category_loss', patience=40, restore_best_weights=True)
+        # reduce_lr = ReduceLROnPlateau(monitor='val_category_loss', factor=0.5, patience=10, cooldown=4)
+
+        # TODO: model checkpoint (is early stopping with restore enough)
+        self.callbacks = [tensorboard]
 
     def __create_network(self, params):
         inputs = Input(shape=(params['n_features'],))
@@ -91,41 +107,45 @@ class AstroNet(BaseEstimator):
         x = Dense(80, activation='relu')(x)
         x = Dense(60, activation='relu')(x)
         x = Dense(60, activation='relu')(x)
+        x = Dense(60, activation='relu')(x)
 
         # Class branch
         y = Dense(40, activation='relu')(x)
-        y = Dense(40, activation='relu')(y)
+        y = Dense(20, activation='relu')(y)
 
         # Redshift branch
         z = Dense(40, activation='relu')(x)
         z = Dense(40, activation='relu')(z)
+        z = Dense(20, activation='relu')(z)
+        z = Dense(20, activation='relu')(z)
 
-        preds_category = Dense(3, activation='softmax', name='category_output')(y)
-        preds_redshift = Dense(1, name='redshift_output')(z)
+        preds_category = Dense(3, activation='softmax', name='category')(y)
+        preds_redshift = Dense(1, name='redshift')(z)
 
         model = Model(inputs=inputs, outputs=[preds_category, preds_redshift], name='astronet')
 
         losses = {
-            'category_output': 'categorical_crossentropy',
-            'redshift_output': 'mean_squared_error',
+            'category': 'categorical_crossentropy',
+            'redshift': 'mean_squared_error',
         }
-        loss_weights = {'category_output': 1.0, 'redshift_output': 1.0}
+        loss_weights = {'category': 1.0, 'redshift': 1.0}
 
-        opt = Adam(lr=0.001)
+        opt = Adam(self.lr)
         model.compile(optimizer=opt, loss=losses, loss_weights=loss_weights, metrics=['accuracy'])
 
         return model
 
     def fit(self, X, y, validation_data=None):
         X = self.scaler.fit_transform(X)
-        y['category_output'] = np_utils.to_categorical(y['category_output'])
+        y['category'] = np_utils.to_categorical(y['category'])
         self.network = self.__create_network(self.params)
 
         validation_data = (self.scaler.transform(validation_data[0]),
-                           {'category_output': np_utils.to_categorical(validation_data[1]['category_output']),
-                            'redshift_output': validation_data[1]['redshift_output']})
+                           {'category': np_utils.to_categorical(validation_data[1]['category']),
+                            'redshift': validation_data[1]['redshift']})
 
-        self.network.fit(X, y, validation_data=validation_data, epochs=100, batch_size=32, verbose=1)
+        self.network.fit(X, y, validation_data=validation_data, epochs=1000, batch_size=self.batch_size, verbose=1,
+                         callbacks=self.callbacks)
 
     def predict(self, X, encoder):
         X = self.scaler.transform(X)
@@ -137,6 +157,21 @@ class AstroNet(BaseEstimator):
         predictions_df = decode_clf_preds(y_pred_proba, encoder)
         predictions_df['Z_PHOTO'] = z_pred
         return predictions_df
+
+
+class CustomTensorBoard(TensorBoard):
+    def __init__(self, log_dir):
+        super().__init__(log_dir=log_dir)
+
+    def on_epoch_end(self, epoch, logs=None):
+        # Remove not useful logs
+        logs.pop('loss', None)  # There's already category loss
+        logs.pop('val_loss', None)  # There's already category loss
+        logs.pop('redshift_acc', None)
+        logs.pop('val_redshift_acc', None)
+        # Add learning rate
+        logs.update({'learning rate': K.eval(self.model.optimizer.lr)})
+        super().on_epoch_end(epoch, logs)
 
 
 # TODO: this should be in a pipeline for non ann models
@@ -158,7 +193,7 @@ def decode_clf_preds(y_pred_proba, encoder):
     return predictions_df
 
 
-def get_model_constructor(cfg):
+def get_model(cfg):
     constructors = {
         'rf-class': build_rf_clf,
         'rf-redshift': build_rf_reg,
@@ -171,4 +206,5 @@ def get_model_constructor(cfg):
     if cfg['pred_class']: name += '-class'
     if cfg['pred_z']: name += '-redshift'
 
-    return constructors[name]
+    model = constructors[name](cfg)
+    return model
