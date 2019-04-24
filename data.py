@@ -84,6 +84,20 @@ RATIO_COLUMNS = get_ratio_cols(get_all_pairs(BANDS))
 FLAGS_GAAP_COLUMNS = get_flags_gaap_cols(BANDS)
 
 
+# Colors and ratios with feature importance higher than 1% for classification task
+PAIRS_CLF = [('J', 'Ks'), ('Y', 'Ks'), ('Z', 'Ks'), ('H', 'Ks'), ('Z', 'H'), ('Y', 'H'), ('u', 'r'), ('i', 'Ks'),
+             ('J', 'H'), ('u', 'i'), ('Z', 'J'), ('u', 'g'), ('r', 'Ks'), ('r', 'J'), ('r', 'H'), ('g', 'i'),
+             ('u', 'Y'), ('g', 'r'), ('i', 'H'), ('g', 'Y'), ('i', 'J'), ('u', 'Z'), ('u', 'H'), ('g', 'J'), ]
+COLOR_COLUMNS_CLF = [get_color_str(x, y) for x, y in PAIRS_CLF]
+RATIO_COLUMNS_CLF = [get_ratio_str(x, y) for x, y in PAIRS_CLF]
+
+# Colors and ratios with feature importance higher than 1% for redshift estimation
+PAIRS_REG = [('u', 'r'), ('Z', 'Ks'), ('g', 'i'), ('u', 'g'), ('g', 'Y'), ('g', 'Z'), ('H', 'Ks'), ('Y', 'J'),
+             ('i', 'Ks'), ('r', 'i'), ('r', 'Y'), ('Z', 'J'), ('Z', 'Y'), ('g', 'r'), ('g', 'H'), ('Z', 'J')]
+COLOR_COLUMNS_REG = [get_color_str(x, y) for x, y in PAIRS_REG]
+RATIO_COLUMNS_REG = [get_ratio_str(x, y) for x, y in PAIRS_REG]
+
+
 def get_band_features(bands):
     features = get_mag_gaap_cols(bands)
     band_tuples = [(bands[i], bands[i + 1]) for i in range(len(bands) - 1)]
@@ -94,6 +108,8 @@ def get_band_features(bands):
 
 FEATURES = {
     'all': BAND_COLUMNS + COLOR_COLUMNS + RATIO_COLUMNS + ['CLASS_STAR', 'SG2DPHOT_4'],
+    'top-clf': BAND_COLUMNS + COLOR_COLUMNS_CLF + RATIO_COLUMNS_CLF + ['CLASS_STAR', 'SG2DPHOT_4'],
+    'top-reg': BAND_COLUMNS + COLOR_COLUMNS_REG + RATIO_COLUMNS_REG + ['CLASS_STAR', 'SG2DPHOT_4'],
     'no-u': get_band_features(['g', 'r', 'i', 'Z', 'Y', 'J', 'H', 'Ks']) + ['CLASS_STAR', 'SG2DPHOT_4'],
 }
 
