@@ -258,7 +258,7 @@ def classification_precision_z_report(predictions, z_max=None):
 
 def classification_and_redshift_report(predictions):
     step = 0.02
-    thresholds = np.arange(0, 1 + step, step)
+    thresholds = np.arange(0, 1, step)
     classes = np.unique(predictions['CLASS'])
     color_palette = get_cubehelix_palette(len(classes))
 

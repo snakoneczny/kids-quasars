@@ -87,4 +87,7 @@ if cfg['model'] == 'rf':
 
 if args.save:
     save_predictions(predictions, exp_name=cfg['exp_name'], timestamp=cfg['timestamp_start'])
-    save_model(model, exp_name=cfg['exp_name'], timestamp=cfg['timestamp_start'])
+
+    # Models are needed only for feature importance, accessible only in tree methods
+    if cfg['model'] != 'ann':
+        save_model(model, exp_name=cfg['exp_name'], timestamp=cfg['timestamp_start'])

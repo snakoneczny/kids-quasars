@@ -6,9 +6,9 @@ cut:
 
 model: ann
 
-pred_class: False
+pred_class: True
 
-pred_z: True
+pred_z: False
 
 bands: [u, g, r, i, Z, Y, J, H, Ks]
 
