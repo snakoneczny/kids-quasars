@@ -8,7 +8,7 @@ model: ann
 
 pred_class: True
 
-pred_z: False
+pred_z: True
 
 bands: [u, g, r, i, Z, Y, J, H, Ks]
 

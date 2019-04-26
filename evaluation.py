@@ -10,7 +10,7 @@ from sklearn.metrics import accuracy_score, f1_score, confusion_matrix, log_loss
 from data import EXTERNAL_QSO_PATHS, BASE_CLASSES, BAND_COLUMNS, get_mag_str, clean_gaia, process_2df
 from utils import *
 from plotting import plot_confusion_matrix, plot_roc_curve, plot_precision_recall_curve, get_line_style, \
-    get_cubehelix_palette
+    get_cubehelix_palette, plot_proba_histograms
 
 
 def experiment_report(predictions, z_max=None, col_true='CLASS', true_label='SDSS'):
@@ -48,12 +48,15 @@ def multiclass_report(predictions, col_true='CLASS', true_label='SDSS'):
     logloss = log_loss(y_true, predictions[['GALAXY_PHOTO', 'QSO_PHOTO', 'STAR_PHOTO']])
     print('Logloss = {:.4f}'.format(logloss))
 
+    # Confusion matrices
     cnf_matrix = confusion_matrix(y_true, y_pred)
     plt.figure()
     plot_confusion_matrix(cnf_matrix, classes=class_names, true_label=true_label)
     plt.figure()
     plot_confusion_matrix(cnf_matrix, classes=class_names, normalize=True, true_label=true_label)
     plt.show()
+
+    plot_proba_histograms(predictions)
 
 
 def binary_report(predictions, col_true='CLASS'):
@@ -135,9 +138,16 @@ def redshift_report(predictions, z_max=None):
         print('{metric_name}: {score}'.format(metric_name=metric_name, score=score))
 
         # Divided for classes
-        metric_func = partial(metric_class_split, metric=metric_func, classes=predictions['CLASS'])
-        scores = np.around(metric_func(predictions['Z'], predictions['Z_PHOTO']), 4)
+        scores = np.around(metric_class_split(predictions['Z'], predictions['Z_PHOTO'], metric=metric_func,
+                                              classes=predictions['CLASS']), 4)
         print(', '.join(['{c}: {s}'.format(metric_name=metric_name, c=c, s=s) for c, s in zip(classes, scores)]))
+
+        # Divided for photometric classes
+        if 'CLASS_PHOTO' in predictions:
+            scores = np.around(metric_class_split(predictions['Z'], predictions['Z_PHOTO'], metric=metric_func,
+                                                  classes=predictions['CLASS_PHOTO']), 4)
+            print(', '.join(
+                ['{c} photo: {s}'.format(metric_name=metric_name, c=c, s=s) for c, s in zip(classes, scores)]))
 
     # Show binned statistics
     redshifts_per_class_dict = {}

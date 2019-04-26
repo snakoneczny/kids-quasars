@@ -47,6 +47,7 @@ class AnnClf(BaseEstimator):
         self.network = None
         self.scaler = MinMaxScaler()
         self.epochs = 2000
+        self.patience = 400
         self.batch_size = 256
         self.lr = 0.0001
 
@@ -56,7 +57,7 @@ class AnnClf(BaseEstimator):
             log_name = '{}, {}'.format(params['tag'], log_name)
 
         tensorboard = CustomTensorBoard(log_folder=log_name, params=self.params_exp)
-        early_stopping = EarlyStopping(monitor='val_loss', patience=400, restore_best_weights=True)
+        early_stopping = EarlyStopping(monitor='val_loss', patience=self.patience, restore_best_weights=True)
         self.callbacks = [tensorboard, early_stopping]
 
     def __create_network(self, params):
@@ -102,6 +103,7 @@ class AnnReg(BaseEstimator):
         self.network = None
         self.scaler = MinMaxScaler()
         self.epochs = 4000
+        self.patience = 600
         self.batch_size = 256
         self.lr = 0.0001
 
@@ -111,14 +113,18 @@ class AnnReg(BaseEstimator):
             log_name = '{}, {}'.format(params['tag'], log_name)
 
         tensorboard = CustomTensorBoard(log_folder=log_name, params=self.params_exp)
-        early_stopping = EarlyStopping(monitor='val_loss', patience=600, restore_best_weights=True)
+        early_stopping = EarlyStopping(monitor='val_loss', patience=self.patience, restore_best_weights=True)
         self.callbacks = [tensorboard, early_stopping]
 
     def __create_network(self, params):
         model = Sequential()
         model.add(Dense(80, input_dim=params['n_features'], activation='relu'))
+        model.add(Dense(80, activation='relu'))
+        model.add(Dense(40, activation='relu'))
         model.add(Dense(40, activation='relu'))
         model.add(Dense(20, activation='relu'))
+        model.add(Dense(20, activation='relu'))
+        model.add(Dense(10, activation='relu'))
         model.add(Dense(10, activation='relu'))
         model.add(Dense(1, name='redshift'))
 
@@ -151,7 +157,8 @@ class AstroNet(BaseEstimator):
         self.params_exp = params
         self.network = None
         self.scaler = MinMaxScaler()
-        self.epochs = 1000
+        self.epochs = 4000
+        self.patience = 600
         self.batch_size = 256
         self.lr = 0.0001
 
@@ -160,49 +167,36 @@ class AstroNet(BaseEstimator):
             log_name = '{}, {}'.format(params['tag'], log_name)
 
         tensorboard = CustomTensorBoard(log_folder=log_name, params=self.params_exp)
-        early_stopping = EarlyStopping(monitor='val_category_loss', patience=400, restore_best_weights=True)
+        early_stopping = EarlyStopping(monitor='val_redshift_loss', patience=self.patience, restore_best_weights=True)
         self.callbacks = [tensorboard, early_stopping]
 
     def __create_network(self, params):
         inputs = Input(shape=(params['n_features'],))
 
         # Main branch
-        x = Dense(64, activation='relu')(inputs)
-        x = Dense(64, activation='relu')(x)
-        x = Dense(32, activation='relu')(x)
+        x = Dense(60, activation='relu')(inputs)
+        x = Dense(60, activation='relu')(x)
+        x = Dense(40, activation='relu')(x)
+        x = Dense(40, activation='relu')(x)
+        x = Dense(20, activation='relu')(x)
+        x = Dense(20, activation='relu')(x)
 
-        # First outputs
-        y = Dense(16, activation='relu')(x)
-        y = Dense(8, activation='relu')(y)
-        preds_y_1 = Dense(3, activation='softmax', name='category_1')(y)
-
-        z = Dense(32, activation='relu')(x)
-        z = Dense(16, activation='relu')(z)
-        preds_z_1 = Dense(1, name='redshift_1')(z)
-
-        # Continue main branch
-        x = Dense(32, activation='relu')(x)
-        x = Dense(32, activation='relu')(x)
-        x = Dense(32, activation='relu')(x)
-
-        # Second outputs
-        y = Dense(16, activation='relu')(x)
-        y = Dense(8, activation='relu')(y)
+        # Outputs
+        y = Dense(10, activation='relu')(x)
+        y = Dense(10, activation='relu')(y)
         preds_y = Dense(3, activation='softmax', name='category')(y)
 
-        z = Dense(32, activation='relu')(x)
-        z = Dense(16, activation='relu')(z)
+        z = Dense(20, activation='relu')(x)
+        z = Dense(20, activation='relu')(z)
         preds_z = Dense(1, name='redshift')(z)
 
-        model = Model(inputs=inputs, outputs=[preds_y, preds_y_1, preds_z, preds_z_1], name='astronet')
+        model = Model(inputs=inputs, outputs=[preds_y, preds_z], name='astronet')
 
         losses = {
             'category': 'categorical_crossentropy',
-            'category_1': 'categorical_crossentropy',
             'redshift': 'mean_squared_error',
-            'redshift_1': 'mean_squared_error',
         }
-        loss_weights = {'category': 1.0, 'category_1': 1.0, 'redshift': 1.0, 'redshift_1': 1.0}
+        loss_weights = {'category': 1.0, 'redshift': 1.0}
 
         opt = Adam(self.lr)
         model.compile(optimizer=opt, loss=losses, loss_weights=loss_weights,
@@ -232,12 +226,13 @@ class AstroNet(BaseEstimator):
 class CustomTensorBoard(TensorBoard):
     def __init__(self, log_folder, params):
         self.params_exp = params
-        log_dir = './logs/ann/{}'.format(log_folder)
+        log_dir = './logs/exp/{}'.format(log_folder)
         super().__init__(log_dir=log_dir)
 
     def on_epoch_end(self, epoch, logs=None):
+        logs_to_send = logs.copy()
         # Add learning rate
-        logs.update({'learning rate': K.eval(self.model.optimizer.lr)})
+        logs_to_send.update({'learning rate': K.eval(self.model.optimizer.lr)})
 
         # Remove artificial logs
         to_pop = ['loss']
@@ -245,23 +240,17 @@ class CustomTensorBoard(TensorBoard):
             to_pop += [
                 # Losses are not needed as we track all metrics with their proper names
                 'category_loss',
-                'category_1_loss',
                 'redshift_loss',
-                'redshift_1_loss',
                 # Below metrics are artificially created due to metrics tracking
                 'redshift_categorical_crossentropy',
-                'redshift_1_categorical_crossentropy',
                 'redshift_acc',
-                'redshift_1_acc',
                 # The same for category
                 'category_mean_squared_error',
-                'category_1_mean_squared_error',
                 'category_mean_absolute_error',
-                'category_1_mean_absolute_error',
             ]
         for str in to_pop:
-            logs.pop(str, None)
-            logs.pop('val_{}'.format(str), None)
+            logs_to_send.pop(str, None)
+            logs_to_send.pop('val_{}'.format(str), None)
 
         # Standalone problems, add category or redshift to metric names
         if not(self.params_exp['pred_class'] and self.params_exp['pred_z']):
@@ -269,26 +258,20 @@ class CustomTensorBoard(TensorBoard):
             metrics = ['categorical_crossentropy', 'acc'] if self.params_exp['pred_class'] \
                 else ['mean_squared_error', 'mean_absolute_error']
             for metric in metrics:
-                logs['{}_{}'.format(t, metric)] = logs.pop('{}'.format(metric))
-                logs['val_{}_{}'.format(t, metric)] = logs.pop('val_{}'.format(metric))
+                logs_to_send['{}_{}'.format(t, metric)] = logs_to_send.pop('{}'.format(metric))
+                logs_to_send['val_{}_{}'.format(t, metric)] = logs_to_send.pop('val_{}'.format(metric))
 
-        super().on_epoch_end(epoch, logs)
+        super().on_epoch_end(epoch, logs_to_send)
 
 
 # TODO: this function transforms y to categorical and scales X, could it be merged with build_validation_data?
 def create_multioutput_data(y, validation_data, scaler):
     y_categorical = np_utils.to_categorical(y['category'])
     y['category'] = y_categorical
-    y['category_1'] = y_categorical
-    y['redshift_1'] = y['redshift']
 
     y_val_categorical = np_utils.to_categorical(validation_data[1]['category'])
     validation_data = (scaler.transform(validation_data[0]),
-                       {'category': y_val_categorical,
-                        'category_1': y_val_categorical,
-                        'redshift': validation_data[1]['redshift'],
-                        'redshift_1': validation_data[1]['redshift'],
-                        })
+                       {'category': y_val_categorical, 'redshift': validation_data[1]['redshift']})
 
     return y, validation_data
 

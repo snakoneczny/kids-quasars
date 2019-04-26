@@ -11,10 +11,17 @@ from utils import pretty_print_feature, \
     get_external_qso_short_name
 from data import EXTERNAL_QSO_DICT, BASE_CLASSES, BAND_COLUMNS, process_2df
 
+COLOR_QSO = (0.08605633600581403, 0.23824692404212, 0.30561236308077167)
+COLOR_STAR = (0.7587183008012618, 0.7922069335474338, 0.9543861221913403)
+COLOR_GALAXY = (0.32927729263408284, 0.4762845556584382, 0.1837155549758328)
+
 CUSTOM_COLORS = {
-    'QSO': (0.08605633600581403, 0.23824692404212, 0.30561236308077167),
-    'STAR': (0.7587183008012618, 0.7922069335474338, 0.9543861221913403),
-    'GALAXY': (0.32927729263408284, 0.4762845556584382, 0.1837155549758328),
+    'QSO': COLOR_QSO,
+    'QSO_PHOTO': COLOR_QSO,
+    'STAR': COLOR_STAR,
+    'STAR_PHOTO': COLOR_STAR,
+    'GALAXY': COLOR_GALAXY,
+    'GALAXY_PHOTO': COLOR_GALAXY,
     'not SDSS': (0.8146245329198283, 0.49548316572322215, 0.5752525936416857),
     'UNKNOWN': (0.6, 0.6, 0.6),
     False: (0.8299576787894204, 0.5632024035248271, 0.7762744444444445),
@@ -115,6 +122,20 @@ def plot_precision_recall_curve(precisions, recalls, average_precision, precisio
     plt.ylim([0.0, 1.05])
     plt.xlim([0.0, 1.0])
     plt.title('Precision-Recall curve: AP={0:0.2f}'.format(average_precision))
+
+
+# TODO: maybe some more general plotting functions can be made
+def plot_proba_histograms(data):
+    columns = ['{}_PHOTO'.format(c) for c in BASE_CLASSES]
+    color_palette = get_cubehelix_palette(len(columns))
+    plt.figure()
+    for i, column in enumerate(columns):
+        sns.distplot(data[column], label=column, kde=False, rug=False, norm_hist=True, color=color_palette[i],
+                     hist_kws={'alpha': 1.0, 'histtype': 'step', 'linewidth': 1.5, 'linestyle': get_line_style(i)})
+    plt.xlabel('probability')
+    plt.ylabel('normalized counts per bin')
+    plt.legend()
+    plt.tight_layout()
 
 
 def plot_histograms(data_dict, columns=BAND_COLUMNS, x_lim_dict=None, title=None, pretty_print_function=None,
