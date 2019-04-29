@@ -18,7 +18,7 @@ EXTERNAL_QSO_DICT = OrderedDict(
 BASE_CLASSES = ['QSO', 'STAR', 'GALAXY']
 
 COLUMNS_KIDS = ['ID', 'RAJ2000', 'DECJ2000', 'Flag', 'CLASS_STAR', 'SG2DPHOT']
-COLUMNS_SDSS = ['CLASS', 'SUBCLASS', 'Z', 'Z_ERR', 'ZWARNING']
+COLUMNS_SDSS = ['CLASS', 'SUBCLASS', 'Z', 'Z_ERR', 'ZWARNING', 'Z_NOQSO', 'Z_ERR_NOQSO', 'ZWARNING_NOQSO']
 
 
 def get_mag_str(band):
@@ -82,7 +82,6 @@ COLOR_COLUMNS = get_color_cols(get_all_pairs(BANDS))
 COLOR_NEXT_COLUMNS = get_color_cols(get_next_pairs(BANDS))
 RATIO_COLUMNS = get_ratio_cols(get_all_pairs(BANDS))
 FLAGS_GAAP_COLUMNS = get_flags_gaap_cols(BANDS)
-
 
 # Colors and ratios with feature importance higher than 1% for classification task
 PAIRS_CLF = [('J', 'Ks'), ('Y', 'Ks'), ('Z', 'Ks'), ('H', 'Ks'), ('Z', 'H'), ('Y', 'H'), ('u', 'r'), ('i', 'Ks'),
@@ -175,21 +174,6 @@ def get_skiprows(path, n):
     n_rows = sum(1 for _ in open(path)) - 1  # number of records in file (excludes header)
     skiprows = sorted(random.sample(range(1, n_rows + 1), n_rows - n))  # the 0-indexed header will not be included
     return skiprows
-
-
-def add_sdss_info(data, sdss_path):
-    data_sdss = pd.read_csv(sdss_path, usecols=['ID', 'CLASS', 'SUBCLASS', 'Z'])
-    print('SDSS data shape: {}'.format(data_sdss.shape))
-
-    data = data.merge(data_sdss, how='left', on='ID')
-    data['CLASS_FILLED'] = data['CLASS'].fillna(value='UNKNOWN')
-
-    data_sdss = data.dropna(axis=0, subset=['CLASS'])
-
-    print('SDSS info shape: {}'.format(data_sdss.shape))
-    print(np.unique(data['CLASS_FILLED'], return_counts=True))
-
-    return data, data_sdss
 
 
 def clean_kids(data, bands=BANDS, with_print=True):
@@ -302,6 +286,14 @@ def process_sg2dphot(data):
 
 
 def clean_sdss(data, with_print=True):
+    # Keep old values of Z and ZWARNING and merge them with no-qso ones for galaxy subset
+    for c in ['Z', 'Z_ERR', 'ZWARNING']:
+        data.loc[:, '{}_org'.format(c)] = data.loc[:, c]
+    data_galaxy = data.loc[data['CLASS'] == 'GALAXY']
+    for c in ['Z', 'Z_ERR', 'ZWARNING']:
+        data_galaxy.loc[:, c] = data_galaxy.loc[:, '{}_NOQSO'.format(c)]
+    data.update(data_galaxy)
+
     data_cleaned = data.loc[data['ZWARNING'] == 0].reset_index(drop=True)
     if with_print: print('Cleaning SDSS: {} left'.format(data_cleaned.shape[0]))
     return data_cleaned
