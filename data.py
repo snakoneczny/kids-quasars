@@ -1,15 +1,17 @@
+import os
 import random
 from collections import OrderedDict
 
-import numpy as np
 import pandas as pd
 from astropy.table import Table
 
+from config import DATA_PATH
+
 EXTERNAL_QSO_PATHS = [
-    '/media/snakoneczny/data/KiDS/KiDS.DR3.x.2QZ6QZ.cols.csv',
-    '/media/snakoneczny/data/KiDS/KiDS.DR3.x.QSO.RICHARDS.2009.csv',
-    '/media/snakoneczny/data/KiDS/KiDS.DR3.x.QSO.RICHARDS.2015.csv',
-    '/media/snakoneczny/data/KiDS/KiDS.DR3.x.QSO.GALEX.csv',
+    os.path.join(DATA_PATH, 'KiDS/KiDS.DR3.x.2QZ6QZ.cols.csv'),
+    os.path.join(DATA_PATH, 'KiDS/KiDS.DR3.x.QSO.RICHARDS.2009.csv'),
+    os.path.join(DATA_PATH, 'KiDS/KiDS.DR3.x.QSO.RICHARDS.2015.csv'),
+    os.path.join(DATA_PATH, 'KiDS/KiDS.DR3.x.QSO.GALEX.csv'),
 ]
 
 EXTERNAL_QSO_DICT = OrderedDict(

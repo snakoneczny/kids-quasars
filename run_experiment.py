@@ -1,3 +1,4 @@
+import os
 import argparse
 from config_parser import get_config
 
@@ -6,6 +7,7 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 
+from config import DATA_PATH
 from utils import logger, save_predictions, save_model
 from data import get_mag_str, process_kids
 from experiments import kfold_validation, top_k_split, do_experiment
@@ -23,8 +25,8 @@ cfg = get_config(args)
 model = get_model(cfg)
 
 # Read data
-data_path = '/media/snakoneczny/data/KiDS/DR4/{train_data}.fits'.format(train_data=cfg['train_data'])
-data = process_kids(data_path, bands=cfg['bands'], cut=cfg['cut'], sdss_cleaning=True,)
+data_path = '{}/KiDS/DR4/{train_data}.fits'.format(DATA_PATH, train_data=cfg['train_data'])
+data = process_kids(data_path, bands=cfg['bands'], cut=cfg['cut'], sdss_cleaning=True)
 
 # Get X and y
 X = data[cfg['features']].values
