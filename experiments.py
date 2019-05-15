@@ -30,10 +30,12 @@ def do_experiment(data, model, cfg, encoder, X_train, X_test, y_train, y_test, z
 
     # Train the model
     true_outputs = build_outputs(y_train, z_train, cfg)
-    # TODO: cos z is_validation
     train_params = {}
     if cfg['model'] == 'ann':
-        train_params['validation_data'] = build_validation_data(X_test, y_test, z_test, cfg)
+        train_params['validation_data'] = build_ann_validation_data(X_test, y_test, z_test, cfg)
+    elif cfg['model'] == 'xgb':
+        train_params['eval_set'] = build_xgb_validation_data(X_test, y_test, z_test, cfg)
+        train_params['early_stopping_rounds'] = 100  # TODO: extract some train parameters
     model.fit(X_train, true_outputs, **train_params)
 
     # Predict on the validation data
@@ -187,7 +189,15 @@ def build_outputs(y, z, cfg):
     return outputs
 
 
-def build_validation_data(X_val, y_val, z_val, cfg):
+def build_ann_validation_data(X_val, y_val, z_val, cfg):
     validation_outputs = build_ann_output_dict(y_val, z_val, cfg)
     validation_data = (X_val, validation_outputs)
     return validation_data
+
+
+def build_xgb_validation_data(X_val, y_val, z_val, cfg):
+    if cfg['pred_class']:
+        val_list = [(X_val, y_val)]
+    else:
+        val_list = [(X_val, z_val)]
+    return val_list

@@ -27,17 +27,19 @@ def build_rf_reg(params):
 
 def build_xgb_clf(params):
     return XGBClassifier(
-        max_depth=7, learning_rate=0.1, n_estimators=200, objective='multi:softmax', booster='gbtree', n_jobs=12,
-        gamma=0, min_child_weight=1, max_delta_step=0, subsample=1, colsample_bytree=1, colsample_bylevel=1,
-        reg_alpha=0, reg_lambda=1, scale_pos_weight=1, base_score=0.5, random_state=18235, missing=None, verbosity=1,
+        max_depth=7, learning_rate=0.1, gamma=0, min_child_weight=1, colsample_bytree=0.7, subsample=0.8,
+        scale_pos_weight=2, reg_alpha=0, reg_lambda=1, n_estimators=100000, objective='multi:softmax', booster='gbtree',
+        max_delta_step=0, colsample_bylevel=1, base_score=0.5, random_state=18235, missing=None, verbosity=0, n_jobs=12,
     )
 
 
 def build_xgb_reg(params):
-    return XGBRegressor(max_depth=7, learning_rate=0.1, n_estimators=200, verbosity=0, objective='reg:linear',
-                        booster='gbtree', n_jobs=12, gamma=0, min_child_weight=1, max_delta_step=0, subsample=1,
-                        colsample_bytree=1, colsample_bylevel=1, colsample_bynode=1, reg_alpha=0, reg_lambda=1,
-                        scale_pos_weight=1, base_score=0.5, random_state=1587, missing=None, importance_type='gain')
+    return XGBRegressor(
+        max_depth=5, learning_rate=0.1, gamma=0, min_child_weight=20, colsample_bytree=0.5, subsample=1,
+        scale_pos_weight=1, reg_alpha=1, reg_lambda=1, n_estimators=100000, objective='reg:linear', booster='gbtree',
+        max_delta_step=0, colsample_bylevel=1, colsample_bynode=1, base_score=0.5, random_state=1587, missing=None,
+        importance_type='gain', verbosity=0, n_jobs=12,
+    )
 
 
 class AnnClf(BaseEstimator):
@@ -56,9 +58,9 @@ class AnnClf(BaseEstimator):
         if params['tag']:
             log_name = '{}, {}'.format(params['tag'], log_name)
 
-        tensorboard = CustomTensorBoard(log_folder=log_name, params=self.params_exp)
         early_stopping = EarlyStopping(monitor='val_loss', patience=self.patience, restore_best_weights=True)
-        self.callbacks = [tensorboard, early_stopping]
+        tensorboard = CustomTensorBoard(log_folder=log_name, params=self.params_exp)
+        self.callbacks = [early_stopping, tensorboard]
 
     def __create_network(self, params):
         model = Sequential()
@@ -112,9 +114,9 @@ class AnnReg(BaseEstimator):
         if params['tag']:
             log_name = '{}, {}'.format(params['tag'], log_name)
 
-        tensorboard = CustomTensorBoard(log_folder=log_name, params=self.params_exp)
         early_stopping = EarlyStopping(monitor='val_loss', patience=self.patience, restore_best_weights=True)
-        self.callbacks = [tensorboard, early_stopping]
+        tensorboard = CustomTensorBoard(log_folder=log_name, params=self.params_exp)
+        self.callbacks = [early_stopping, tensorboard]
 
     def __create_network(self, params):
         model = Sequential()
@@ -278,12 +280,13 @@ def create_multioutput_data(y, validation_data, scaler):
 
 # TODO: this should be in a pipeline for non ann models, also encoder usage is multiplied in networks and here
 def get_single_problem_predictions(model, X, encoder, cfg):
+    params_pred = {'ntree_limit': model.best_ntree_limit} if cfg['model'] == 'xgb' and model.best_ntree_limit else {}
     if cfg['pred_class']:
-        y_pred_proba = model.predict_proba(X)
+        y_pred_proba = model.predict_proba(X, **params_pred)
         predictions = decode_clf_preds(y_pred_proba, encoder)
     else:
         predictions = pd.DataFrame()
-        predictions['Z_PHOTO'] = model.predict(X)
+        predictions['Z_PHOTO'] = model.predict(X, **params_pred)
     return predictions
 
 
