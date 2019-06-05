@@ -306,6 +306,7 @@ def plot_external_qso_size(data):
     plt.legend()
 
 
+# TODO: intelligence of feature importance should not be here?
 def plot_feature_ranking(model, features, model_type='rf'):
     if model_type == 'rf':
         importances = model.feature_importances_ * 100

@@ -146,12 +146,16 @@ def show_correlations(maps_x, maps_y):
     display(c_df)
 
 
-def describe_column(data):
-    values, counts = np.unique(data, return_counts=True)
+def get_column_desc(column_data):
+    values, counts = np.unique(column_data, return_counts=True)
     s = sum(counts)
     contribution = counts / s * 100
     desc = '\n'.join(['{} - {} ({:.2f}%)'.format(v, c, p) for v, c, p in zip(values, counts, contribution)])
     return desc
+
+
+def print_column_desc(column_data):
+    print(get_column_desc(column_data))
 
 
 def pretty_print_magnitude(str):

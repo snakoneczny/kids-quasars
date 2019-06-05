@@ -144,11 +144,11 @@ def read_fits_to_pandas(filepath, columns=None):
 
     # Binary string don't work with scikit metrics
     if 'CLASS' in table:
-        table['CLASS'] = table['CLASS'].apply(lambda x: x.decode('UTF-8').strip())
-    table['ID'] = table['ID'].apply(lambda x: x.decode('UTF-8').strip())
+        table.loc[:, 'CLASS'] = table['CLASS'].apply(lambda x: x.decode('UTF-8').strip())
+    table.loc[:, 'ID'] = table['ID'].apply(lambda x: x.decode('UTF-8').strip())
 
     # Change type to work with it as with a bit map
-    table['IMAFLAGS_ISO'] = table['IMAFLAGS_ISO'].astype(int)  # TODO: why? was okay earlier
+    table.loc[:, 'IMAFLAGS_ISO'] = table['IMAFLAGS_ISO'].astype(int)  # TODO: why? was okay earlier
 
     return table
 
@@ -215,7 +215,10 @@ def clean_kids(data, bands=BANDS, with_print=True):
     flags_gaap = get_flags_gaap_cols(bands)
     for c in flags_gaap:
         mask &= (data_no_na[c] == 0)
-    if with_print: print('Removing GAAP flags: {} left'.format(mask.sum()))
+    if with_print:
+        n_left = mask.sum()
+        p_left = mask.sum() / data.shape[0] * 100
+        print('Removing GAAP flags: {} ({:.2f}%) left'.format(n_left, p_left))
 
     # Remove ima-flags
     flag_mask = 0b0111111
@@ -261,7 +264,7 @@ def add_colors(data):
         column_y = get_mag_str(band_y)
         color_str = get_color_str(band_x, band_y)
         if color_str not in data.columns:
-            data[color_str] = data[column_x] - data[column_y]
+            data.loc[:, color_str] = data[column_x] - data[column_y]
     return data
 
 
@@ -270,7 +273,7 @@ def add_magnitude_ratio(data):
     for band_x, band_y in band_pairs:
         column_x = get_mag_str(band_x)
         column_y = get_mag_str(band_y)
-        data[get_ratio_str(band_x, band_y)] = data[column_x] / data[column_y]
+        data.loc[:, get_ratio_str(band_x, band_y)] = data[column_x] / data[column_y]
     return data
 
 
@@ -339,12 +342,12 @@ def clean_gaia(data, parallax_error=1, pm_error=None, parallax_lim=None, pm_lim=
 
 def norm_gaia_observations(data):
     for col in ['parallax', 'pmra', 'pmdec']:
-        data[col + '_norm'] = data[col] / data[col + '_error']
+        data.loc[:, col + '_norm'] = data[col] / data[col + '_error']
     return data
 
 
 def process_2df(data):
-    data['id1'] = data['id1'].apply(lambda x: x.strip())
-    data['id1'] = data['id1'].apply(lambda x: x.upper())
+    data.loc[:, 'id1'] = data['id1'].apply(lambda x: x.strip())
+    data.loc[:, 'id1'] = data['id1'].apply(lambda x: x.upper())
     data = data.replace('GAL', 'GALAXY')
     return data

@@ -4,14 +4,16 @@ inference_data: KiDS.DR4.merged
 
 cut:
 
-model: ann
+model: rf
 
 pred_class: False
 
 pred_z: True
 
+specialization: galaxy
+
 bands: [u, g, r, i, Z, Y, J, H, Ks]
 
-features: all
+features_key: all
 
 test: magnitude

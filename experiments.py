@@ -28,6 +28,13 @@ metrics_redshift = OrderedDict([
 def do_experiment(data, model, cfg, encoder, X_train, X_test, y_train, y_test, z_train, z_test, idx_test):
     predictions_df = data.loc[idx_test, ['ID', 'CLASS', 'Z']].reset_index(drop=True)
 
+    # Limit train sample to specialized subset
+    if cfg['specialization']:
+        mask = (y_train == encoder.transform([cfg['specialization']])[0])
+        X_train = X_train[mask]
+        y_train = y_train[mask]
+        z_train = z_train[mask]
+
     # Train the model
     true_outputs = build_outputs(y_train, z_train, cfg)
     train_params = {}
@@ -45,13 +52,17 @@ def do_experiment(data, model, cfg, encoder, X_train, X_test, y_train, y_test, z
         preds_val = get_single_problem_predictions(model, X_test, encoder, cfg)
 
     # Store prediction in original data order
-    tmp = pd.concat([predictions_df, preds_val], ignore_index=True, axis=1)
-    tmp['subset'] = 'test'
-
     predictions_df = pd.concat([predictions_df, preds_val], axis=1)
     predictions_df['exp_subset'] = 'test'
 
     # Get and store scores
+    if cfg['specialization']:
+        # Limit test sample to specialized subset when calculating scores
+        mask = (y_test == encoder.transform([cfg['specialization']])[0])
+        y_test = y_test[mask]
+        z_test = z_test[mask]
+        preds_val = preds_val[mask]
+
     scores, report = get_scores(y_test, z_test, preds_val, encoder, cfg)
 
     return predictions_df, scores, report

@@ -14,14 +14,13 @@ from keras.callbacks import TensorBoard, EarlyStopping
 
 def build_rf_clf(params):
     return RandomForestClassifier(
-        n_estimators=400, random_state=491237, criterion='entropy', n_jobs=12,
-        # class_weight={'QSO': 0.4, 'STAR': 0.4, 'GALAXY': 0.2}
+        n_estimators=400, criterion='gini', random_state=491237, n_jobs=12,
     )
 
 
 def build_rf_reg(params):
     return RandomForestRegressor(
-        n_estimators=400, random_state=491237, n_jobs=12,
+        n_estimators=400, criterion='mse', random_state=491237, n_jobs=12,
     )
 
 

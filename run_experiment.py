@@ -1,4 +1,3 @@
-import os
 import argparse
 from config_parser import get_config
 
