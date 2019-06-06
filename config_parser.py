@@ -31,7 +31,7 @@ def add_experiment_name(cfg):
         model=cfg['model'], features=cfg['features_key'], test=cfg['test'])
 
     if cfg['specialization']:
-        cfg['exp_name'] += 'spec-{}'.format(cfg['specialization'])
+        cfg['exp_name'] += '_spec-{}'.format(cfg['specialization'].lower())
 
     train_data = cfg['train_data'].replace('.', '_')
     cfg['exp_name'] = '{train_data}_{exp_name}'.format(train_data=train_data, exp_name=cfg['exp_name'])

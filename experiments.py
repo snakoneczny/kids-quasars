@@ -28,21 +28,31 @@ metrics_redshift = OrderedDict([
 def do_experiment(data, model, cfg, encoder, X_train, X_test, y_train, y_test, z_train, z_test, idx_test):
     predictions_df = data.loc[idx_test, ['ID', 'CLASS', 'Z']].reset_index(drop=True)
 
-    # Limit train sample to specialized subset
+    # TODO: extract function
+    # Limit train sample and test sample on which scores are calculated to the specialized subset
+    test_scores_params = {'X_test': X_test, 'y_test': y_test, 'z_test': z_test}
     if cfg['specialization']:
         mask = (y_train == encoder.transform([cfg['specialization']])[0])
         X_train = X_train[mask]
         y_train = y_train[mask]
         z_train = z_train[mask]
 
-    # Train the model
+        mask = (y_test == encoder.transform([cfg['specialization']])[0])
+        test_scores_params = {'X_test': X_test[mask], 'y_test': y_test[mask], 'z_test': z_test[mask]}
+
+    # Create all the train parameters
     true_outputs = build_outputs(y_train, z_train, cfg)
     train_params = {}
     if cfg['model'] == 'ann':
-        train_params['validation_data'] = build_ann_validation_data(X_test, y_test, z_test, cfg)
+        # TODO: refactor
+        train_params['validation_data'] = build_ann_validation_data(
+            test_scores_params['X_test'], test_scores_params['y_test'], test_scores_params['z_test'], cfg)
     elif cfg['model'] == 'xgb':
-        train_params['eval_set'] = build_xgb_validation_data(X_test, y_test, z_test, cfg)
+        train_params['eval_set'] = build_xgb_validation_data(
+            test_scores_params['X_test'], test_scores_params['y_test'], test_scores_params['z_test'], cfg)
         train_params['early_stopping_rounds'] = 100  # TODO: extract some train parameters
+
+    # Train the model
     model.fit(X_train, true_outputs, **train_params)
 
     # Predict on the validation data
@@ -57,13 +67,11 @@ def do_experiment(data, model, cfg, encoder, X_train, X_test, y_train, y_test, z
 
     # Get and store scores
     if cfg['specialization']:
-        # Limit test sample to specialized subset when calculating scores
+        # Limit validation predictions to specialized subset when calculating scores
         mask = (y_test == encoder.transform([cfg['specialization']])[0])
-        y_test = y_test[mask]
-        z_test = z_test[mask]
         preds_val = preds_val[mask]
 
-    scores, report = get_scores(y_test, z_test, preds_val, encoder, cfg)
+    scores, report = get_scores(test_scores_params['y_test'], test_scores_params['z_test'], preds_val, encoder, cfg)
 
     return predictions_df, scores, report
 

@@ -212,8 +212,8 @@ def classification_precision_z_report(predictions, z_max=None):
     predictions_zlim = predictions.loc[predictions['Z'] <= z_max]
 
     n_bins = 40
-    _, bin_edges = np.histogram(predictions_zlim['Z_PHOTO'], bins=n_bins)
-    predictions_zlim.loc[:, 'binned'] = pd.cut(predictions_zlim['Z_PHOTO'], bin_edges)
+    # _, bin_edges = np.histogram(predictions_zlim['Z_PHOTO'], bins=n_bins)
+    predictions_zlim.loc[:, 'binned'] = pd.cut(predictions_zlim['Z_PHOTO'], n_bins)
 
     counts_dict = {}  # final index: [predicted class][true class]
     for i, class_pred in enumerate(BASE_CLASSES):
@@ -272,6 +272,7 @@ def classification_and_redshift_report(predictions):
     classes = np.unique(predictions['CLASS'])
     color_palette = get_cubehelix_palette(len(classes))
 
+    # True class plots
     metrics_to_plot = OrderedDict([('MAE', mean_absolute_error), ('MSE', mean_squared_error)])
     for metric_name, metric_func in metrics_to_plot.items():
 
@@ -286,6 +287,30 @@ def classification_and_redshift_report(predictions):
                 metric_values.append(np.around(metric_func(preds_lim['Z'], preds_lim['Z_PHOTO']), 4))
 
             plt.plot(thresholds, metric_values, label='true {}'.format(c), color=color_palette[i],
+                     linestyle=get_line_style(i))
+            plt.xlabel('minimum classification probability')
+            plt.ylabel(metric_name)
+            ax = plt.axes()
+            ax.yaxis.grid(True)
+
+        plt.legend()
+
+    # TODO: refactor
+    # True class plots
+    metrics_to_plot = OrderedDict([('MSE', mean_absolute_error), ('MAE', mean_squared_error)])
+    for metric_name, metric_func in metrics_to_plot.items():
+
+        plt.figure()
+        for i, c in enumerate(classes):
+            preds_class = predictions.loc[predictions['CLASS_PHOTO'] == c]
+
+            # Get scores limited by classification probability thresholds
+            metric_values = []
+            for thr in thresholds:
+                preds_lim = preds_class.loc[preds_class['{}_PHOTO'.format(c)] >= thr]
+                metric_values.append(np.around(metric_func(preds_lim['Z'], preds_lim['Z_PHOTO']), 4))
+
+            plt.plot(thresholds, metric_values, label='photo {}'.format(c), color=color_palette[i],
                      linestyle=get_line_style(i))
             plt.xlabel('minimum classification probability')
             plt.ylabel(metric_name)
