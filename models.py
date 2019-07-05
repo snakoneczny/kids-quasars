@@ -33,19 +33,34 @@ def build_xgb_clf(params):
 
 
 def build_xgb_reg(params):
-    # Default params:
-    return XGBRegressor(
-        max_depth=3, learning_rate=0.1, gamma=0, min_child_weight=1, colsample_bytree=1, subsample=1,
-        scale_pos_weight=1, reg_alpha=0, reg_lambda=1, n_estimators=100000, objective='reg:linear', booster='gbtree',
-        max_delta_step=0, colsample_bylevel=1, colsample_bynode=1, base_score=0.5, random_state=1587, missing=None,
-        importance_type='gain', verbosity=0, n_jobs=12,
-    )
-    # return XGBRegressor(
-    #     max_depth=5, learning_rate=0.1, gamma=0, min_child_weight=20, colsample_bytree=0.5, subsample=1,
-    #     scale_pos_weight=1, reg_alpha=1, reg_lambda=1, n_estimators=100000, objective='reg:linear', booster='gbtree',
-    #     max_delta_step=0, colsample_bylevel=1, colsample_bynode=1, base_score=0.5, random_state=1587, missing=None,
-    #     importance_type='gain', verbosity=0, n_jobs=12,
-    # )
+    # All classes
+    if not params['specialization']:
+        return XGBRegressor(
+            max_depth=5, learning_rate=0.1, gamma=0, min_child_weight=20, colsample_bytree=0.5, subsample=1,
+            scale_pos_weight=1, reg_alpha=1, reg_lambda=1, n_estimators=100000, objective='reg:linear',
+            booster='gbtree', max_delta_step=0, colsample_bylevel=1, colsample_bynode=1, base_score=0.5,
+            random_state=1587, missing=None, importance_type='gain', verbosity=0, n_jobs=12,
+        )
+
+    elif params['specialization'] == 'QSO':
+        # TODO: subsample danger, new random_state?
+        return XGBRegressor(
+            max_depth=5, learning_rate=0.1, gamma=0, min_child_weight=10, colsample_bytree=0.6, subsample=0.4,
+            scale_pos_weight=1, reg_alpha=0, reg_lambda=1, n_estimators=100000, objective='reg:linear',
+            booster='gbtree', max_delta_step=0, colsample_bylevel=1, colsample_bynode=1, base_score=0.5,
+            random_state=1587, missing=None, importance_type='gain', verbosity=0, n_jobs=12,
+        )
+
+    elif params['specialization'] == 'GALAXY':
+        return XGBRegressor(
+            max_depth=7, learning_rate=0.1, gamma=0, min_child_weight=20, colsample_bytree=1, subsample=1,
+            scale_pos_weight=1, reg_alpha=0, reg_lambda=2, n_estimators=100000, objective='reg:linear',
+            booster='gbtree', max_delta_step=0, colsample_bylevel=1, colsample_bynode=1, base_score=0.5,
+            random_state=1587, missing=None, importance_type='gain', verbosity=0, n_jobs=12,
+        )
+
+    else:
+        raise Exception('Not implemented redshift specialization: {}'.format(params['specialization']))
 
 
 class AnnClf(BaseEstimator):

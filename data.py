@@ -19,7 +19,7 @@ EXTERNAL_QSO_DICT = OrderedDict(
 
 BASE_CLASSES = ['QSO', 'STAR', 'GALAXY']
 
-COLUMNS_KIDS = ['ID', 'RAJ2000', 'DECJ2000', 'Flag', 'CLASS_STAR', 'SG2DPHOT']
+COLUMNS_KIDS = ['ID', 'RAJ2000', 'DECJ2000', 'Flag', 'CLASS_STAR', 'SG2DPHOT', 'Z_B']
 COLUMNS_SDSS = ['CLASS', 'SUBCLASS', 'Z', 'Z_ERR', 'ZWARNING', 'Z_NOQSO', 'Z_ERR_NOQSO', 'ZWARNING_NOQSO']
 
 
@@ -148,7 +148,8 @@ def read_fits_to_pandas(filepath, columns=None):
     table.loc[:, 'ID'] = table['ID'].apply(lambda x: x.decode('UTF-8').strip())
 
     # Change type to work with it as with a bit map
-    table.loc[:, 'IMAFLAGS_ISO'] = table['IMAFLAGS_ISO'].astype(int)  # TODO: why? was okay earlier
+    if 'IMAFLAGS_ISO' in table:
+        table.loc[:, 'IMAFLAGS_ISO'] = table['IMAFLAGS_ISO'].astype(int)  # TODO: why? was okay earlier
 
     return table
 

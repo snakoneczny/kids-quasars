@@ -307,14 +307,14 @@ def plot_external_qso_size(data):
 
 
 # TODO: intelligence of feature importance should not be here?
-def plot_feature_ranking(model, features, model_type='rf'):
+def plot_feature_ranking(model, features, model_type='rf', importance_type='gain'):
     if model_type == 'rf':
         importances = model.feature_importances_ * 100
         # no std because it's too big
         # std = np.std([tree.feature_importances_ for tree in model.estimators_], axis=0)
 
     elif model_type == 'xgb':
-        importances = model.get_booster().get_score(importance_type='gain')
+        importances = model.get_booster().get_score(importance_type=importance_type)
         features = list(importances.keys())
         importances = list(importances.values())
         importances = np.array(importances) / sum(importances) * 100

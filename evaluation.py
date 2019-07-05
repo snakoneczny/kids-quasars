@@ -128,13 +128,26 @@ def classification_completeness_z_report(predictions, col_true='CLASS', z_max=No
         plt.legend(loc='upper left')
 
 
+def relative_error(y_true, y_pred):
+    e = (y_pred - y_true) / (1 + y_true)
+    return e.mean()
+
+
+def relative_error_std(y_true, y_pred):
+    e = (y_pred - y_true) / (1 + y_true)
+    return e.std()
+
+
+# TODO: Refactor
 def redshift_report(predictions, z_max=None):
     classes = np.unique(predictions['CLASS'])
 
     # Standard metrics
-    metrics_redshift = [('MSE', mean_squared_error), ('MAE', mean_absolute_error)]
+    metrics_redshift = [('MSE', mean_squared_error), ('MAE', mean_absolute_error),
+                        ('rel. error', relative_error), ('rel. error std', relative_error_std)]
     for metric_name, metric_func in metrics_redshift:
         score = np.around(metric_func(predictions['Z'], predictions['Z_PHOTO']), 4)
+
         print('{metric_name}: {score}'.format(metric_name=metric_name, score=score))
 
         # Divided for classes
@@ -185,21 +198,57 @@ def redshift_report(predictions, z_max=None):
         plt.legend()
 
     # Plot true vs predicted redshifts
+    plot_z_true_vs_pred(predictions, 'Z_PHOTO', z_max)
+    # Plot Z_B for comparison
+    plot_z_true_vs_pred(predictions, 'Z_B', z_max)
+
+
+def plot_z_true_vs_pred(predictions, z_col, z_max):
     z_max = {'GALAXY': min(1, z_max), 'QSO': z_max}
     for c in ['GALAXY', 'QSO']:
         preds_c = predictions.loc[predictions['CLASS'] == c]
 
         plt.figure()
-        p = sns.scatterplot(x='Z', y='Z_PHOTO', data=preds_c)
+        p = sns.scatterplot(x='Z', y=z_col, data=preds_c)
         plt.plot(range(z_max[c] + 1))
         p.set(xlim=(0, z_max[c]), ylim=(0, z_max[c]))
         plt.title(c)
 
         plt.figure()
-        p = sns.kdeplot(preds_c['Z'], preds_c['Z_PHOTO'], shade=True)
+        p = sns.kdeplot(preds_c['Z'], preds_c[z_col], shade=True)
         plt.plot(range(z_max[c] + 1))
         p.set(xlim=(0, z_max[c]), ylim=(0, z_max[c]))
         plt.title(c)
+
+
+# TODO: refactor, its doubled in classification_precision_z_report report
+def plot_z_hist(predictions, z_max=None):
+    predictions_zlim = predictions.loc[predictions['Z'] <= z_max]
+
+    n_bins = 40
+    # _, bin_edges = np.histogram(predictions_zlim['Z_PHOTO'], bins=n_bins)
+    predictions_zlim.loc[:, 'binned'] = pd.cut(predictions_zlim['Z'], n_bins)
+
+    counts_dict = {}  # final index: [predicted class][true class]
+    for i, class_pred in enumerate(BASE_CLASSES):
+        preds_class = predictions_zlim.loc[predictions_zlim['CLASS_PHOTO'] == class_pred]
+        counts_dict[class_pred] = preds_class.groupby(['binned', 'CLASS']).size().unstack(fill_value=0)
+        counts_dict[class_pred].loc[:, 'size'] = counts_dict[class_pred][BASE_CLASSES].sum(axis=1)
+
+    # Size plot
+    plt.figure()
+
+    color_palette = get_cubehelix_palette(len(BASE_CLASSES))
+    for i, class_pred in enumerate(BASE_CLASSES):
+        bin_edges_left = [v.left for v in counts_dict[class_pred].index]
+        size_list_norm = counts_dict[class_pred]['size'] / max(counts_dict[class_pred]['size'])
+        ax = sns.lineplot(bin_edges_left, size_list_norm, drawstyle='steps-pre', label=class_pred,
+                          color=color_palette[i])
+        ax.lines[i].set_linestyle(get_line_style(i))
+
+    plt.xlabel('z')
+    plt.ylabel('number of objects in bin')
+    plt.legend()
 
 
 def classification_precision_z_report(predictions, z_max=None):
@@ -233,6 +282,9 @@ def classification_precision_z_report(predictions, z_max=None):
     plt.xlabel('z photo')
     plt.ylabel('purity')
     plt.legend()
+
+    # True z size plot for comparison
+    plot_z_hist(predictions, z_max=z_max)
 
     # Size plot
     plt.figure()

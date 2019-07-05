@@ -50,7 +50,7 @@ def do_experiment(data, model, cfg, encoder, X_train, X_test, y_train, y_test, z
     elif cfg['model'] == 'xgb':
         train_params['eval_set'] = build_xgb_validation_data(
             test_scores_params['X_test'], test_scores_params['y_test'], test_scores_params['z_test'], cfg)
-        train_params['early_stopping_rounds'] = 100  # TODO: extract some train parameters
+        train_params['early_stopping_rounds'] = 200  # TODO: extract some train parameters
 
     # Train the model
     model.fit(X_train, true_outputs, **train_params)

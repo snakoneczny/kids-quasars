@@ -13,7 +13,6 @@ from experiments import kfold_validation, top_k_split, do_experiment
 from plotting import plot_feature_ranking
 from models import get_model
 
-
 parser = argparse.ArgumentParser()
 parser.add_argument('-c', '--config', dest='config_file', required=True, help='config file name')
 parser.add_argument('-s', '--save', dest='save', action='store_true', help='flag for predictions saving')
@@ -61,9 +60,19 @@ if cfg['test'] == 'kfold':
     logger.info(validation_report)
     logger.info(test_report)
 
+elif cfg['test'] == 'random':
+    # Train test split
+    X_train, X_test, y_train, y_test, z_train, z_test, idx_train, idx_test = train_test_split(
+        X, y_encoded, z, data.index, test_size=0.2, random_state=427)
+
+    # Testing
+    predictions, scores, report = do_experiment(
+        data, model, cfg, encoder, X_train, X_test, y_train, y_test, z_train, z_test, idx_test)
+
+    # Finish by showing reports
+    logger.info(report)
 
 elif cfg['test'] == 'magnitude':
-
     # Train test split
     _, _, X_train, X_test, y_train, y_test, z_train, z_test, idx_train, idx_test = \
         top_k_split(data[get_mag_str('r')], X, y_encoded, z, data.index, test_size=0.1)

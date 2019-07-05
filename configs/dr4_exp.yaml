@@ -10,7 +10,7 @@ pred_class: False
 
 pred_z: True
 
-specialization: qso
+specialization:
 
 bands: [u, g, r, i, Z, Y, J, H, Ks]
 
