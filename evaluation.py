@@ -1,16 +1,25 @@
 import os
 from collections.__init__ import defaultdict, OrderedDict
-from functools import partial
 
 import seaborn as sns
 from matplotlib import pyplot as plt
 from sklearn.metrics import accuracy_score, f1_score, confusion_matrix, log_loss, roc_curve, auc, precision_score, \
-    recall_score, average_precision_score, precision_recall_curve, mean_absolute_error, mean_squared_error
+    recall_score, average_precision_score, precision_recall_curve, mean_squared_error, r2_score
 
 from data import EXTERNAL_QSO_PATHS, BASE_CLASSES, BAND_COLUMNS, get_mag_str, clean_gaia, process_2df
 from utils import *
 from plotting import plot_confusion_matrix, plot_roc_curve, plot_precision_recall_curve, get_line_style, \
-    get_cubehelix_palette, plot_proba_histograms
+    get_cubehelix_palette, plot_proba_histograms, plot_proba_against_size, get_plot_text
+
+
+def relative_err_mean(y_true, y_pred):
+    e = (y_pred - y_true) / (1 + y_true)
+    return e.mean()
+
+
+def relative_err_std(y_true, y_pred):
+    e = (y_pred - y_true) / (1 + y_true)
+    return e.std()
 
 
 def experiment_report(predictions, z_max=None, col_true='CLASS', true_label='SDSS'):
@@ -21,13 +30,16 @@ def experiment_report(predictions, z_max=None, col_true='CLASS', true_label='SDS
         binary_report(predictions, col_true=col_true)
 
         if 'Z' in predictions.columns:
-            classification_completeness_z_report(predictions, col_true=col_true, z_max=z_max)
+            completeness_z_report(predictions, col_true=col_true, z_max=z_max)
 
     if 'Z_PHOTO' in predictions.columns:
-        redshift_report(predictions, z_max=z_max)
+        redshift_metrics(predictions)
+        redshift_scatter_plots(predictions, z_max)
+        # redshift_binned_stats(predictions)
+        plot_z_hists(predictions, z_max)
 
     if 'CLASS_PHOTO' in predictions.columns and 'Z_PHOTO' in predictions.columns:
-        classification_precision_z_report(predictions, z_max=z_max)
+        precision_z_report(predictions, z_max=z_max)
         classification_and_redshift_report(predictions)
 
 
@@ -96,7 +108,7 @@ def binary_report(predictions, col_true='CLASS'):
     plot_precision_recall_curve(precisions, recalls, average_precision, precision, recall)
 
 
-def classification_completeness_z_report(predictions, col_true='CLASS', z_max=None):
+def completeness_z_report(predictions, col_true='CLASS', z_max=None):
     """
     Compare predicted classes against true redshifts
     :param predictions:
@@ -119,84 +131,40 @@ def classification_completeness_z_report(predictions, col_true='CLASS', z_max=No
         color_palette = get_cubehelix_palette(len(BASE_CLASSES))
 
         for i, class_pred in enumerate(BASE_CLASSES):
-            sns.distplot(true_class_as_dict[class_pred], label='{} clf. as {}'.format(class_true, class_pred),
-                         bins=bin_edges, kde=False, rug=False, color=color_palette[i],
-                         hist_kws={'alpha': 1.0, 'histtype': 'step', 'linewidth': 1.5, 'linestyle': get_line_style(i)})
+            hist_kws = {'alpha': 1.0, 'histtype': 'step', 'linewidth': 1.5, 'linestyle': get_line_style(i)}
+            label = '{} clf. as {}'.format(get_plot_text(class_true), get_plot_text(class_pred, is_photo=True))
+            ax = sns.distplot(true_class_as_dict[class_pred], label=label, bins=bin_edges, kde=False, rug=False,
+                              color=color_palette[i], hist_kws=hist_kws)
+            ax.set(yscale='log')
 
         plt.xlabel('redshift')
         plt.ylabel('counts per bin')
         plt.legend(loc='upper left')
+        plt.show()
 
 
-def relative_error(y_true, y_pred):
-    e = (y_pred - y_true) / (1 + y_true)
-    return e.mean()
-
-
-def relative_error_std(y_true, y_pred):
-    e = (y_pred - y_true) / (1 + y_true)
-    return e.std()
-
-
-# TODO: Refactor
-def redshift_report(predictions, z_max=None):
+def redshift_metrics(predictions):
     classes = np.unique(predictions['CLASS'])
 
     # Standard metrics
-    metrics_redshift = [('MSE', mean_squared_error), ('MAE', mean_absolute_error),
-                        ('rel. error', relative_error), ('rel. error std', relative_error_std)]
-    for metric_name, metric_func in metrics_redshift:
+    metrics = [('MSE', mean_squared_error), ('R2', r2_score),
+               ('rel. error', relative_err_mean), ('rel. error std', relative_err_std)]
+    for metric_name, metric_func in metrics:
         score = np.around(metric_func(predictions['Z'], predictions['Z_PHOTO']), 4)
-
         print('{metric_name}: {score}'.format(metric_name=metric_name, score=score))
 
         # Divided for classes
-        scores = np.around(metric_class_split(predictions['Z'], predictions['Z_PHOTO'], metric=metric_func,
-                                              classes=predictions['CLASS']), 4)
-        print(', '.join(['{c}: {s}'.format(metric_name=metric_name, c=c, s=s) for c, s in zip(classes, scores)]))
-
-        # Divided for photometric classes
-        if 'CLASS_PHOTO' in predictions:
+        for (class_col, str_add) in [('CLASS', ''), ('CLASS_PHOTO', ' photo')]:
+            if class_col not in predictions:
+                continue
             scores = np.around(metric_class_split(predictions['Z'], predictions['Z_PHOTO'], metric=metric_func,
-                                                  classes=predictions['CLASS_PHOTO']), 4)
+                                                  classes=predictions[class_col]), 4)
             print(', '.join(
-                ['{c} photo: {s}'.format(metric_name=metric_name, c=c, s=s) for c, s in zip(classes, scores)]))
+                ['{class_name}{str_add}: {score}'.format(class_name=class_name, str_add=str_add, score=score) for
+                 class_name, score in zip(classes, scores)]))
 
-    # Show binned statistics
-    redshifts_per_class_dict = {}
-    for c in classes:
-        redshifts_per_class_dict[c] = predictions.loc[predictions['CLASS'] == c]['Z']
 
-    _, bin_edges = np.histogram(np.hstack(
-        (redshifts_per_class_dict['QSO'], redshifts_per_class_dict['STAR'], redshifts_per_class_dict['GALAXY'])),
-        bins=40)
-
-    # Calculate errors in redshift bins
-    predictions.loc[:, 'binned'] = pd.cut(predictions['Z'], bin_edges)
-    predictions.loc[:, 'residual'] = abs(predictions['Z'] - predictions['Z_PHOTO'])
-    predictions.loc[:, 'residual_sqr'] = (predictions['Z'] - predictions['Z_PHOTO']) ** 2
-
-    mae_dict, mse_dict, size_dict = {}, {}, {}
-    for i, c in enumerate(classes):
-        preds_class = predictions.loc[predictions['CLASS'] == c]
-        grouped = preds_class.groupby(by='binned')
-
-        mae_dict[c] = grouped['residual'].mean().values
-        mse_dict[c] = grouped['residual_sqr'].mean().values
-        size_dict[c] = grouped.size().values
-
-    # Plot errors in bins of predicted redshift
-    to_plot = [(mae_dict, 'mean absolute error'), (mse_dict, 'mean square error'), (size_dict, 'number of objects')]
-    color_palette = get_cubehelix_palette(len(classes))
-    for x_dict, plot_title in to_plot:
-        plt.figure()
-        for i, c in enumerate(classes):
-            ax = sns.lineplot(bin_edges[:-1], x_dict[c], drawstyle='steps-pre', label=c, color=color_palette[i])
-            ax.lines[i].set_linestyle(get_line_style(i))
-        plt.xlabel('redshift')
-        plt.ylabel(plot_title)
-        plt.legend()
-
+def redshift_scatter_plots(predictions, z_max):
     # Plot true vs predicted redshifts
     plot_z_true_vs_pred(predictions, 'Z_PHOTO', z_max)
     # Plot Z_B for comparison
@@ -208,114 +176,83 @@ def plot_z_true_vs_pred(predictions, z_col, z_max):
     for c in ['GALAXY', 'QSO']:
         preds_c = predictions.loc[predictions['CLASS'] == c]
 
+        # TODO: refactor
         plt.figure()
         p = sns.scatterplot(x='Z', y=z_col, data=preds_c)
         plt.plot(range(z_max[c] + 1))
         p.set(xlim=(0, z_max[c]), ylim=(0, z_max[c]))
-        plt.title(c)
+        plt.xlabel(get_plot_text('Z'))
+        plt.ylabel(get_plot_text(z_col))
+        plt.title(get_plot_text(c))
 
         plt.figure()
         p = sns.kdeplot(preds_c['Z'], preds_c[z_col], shade=True)
         plt.plot(range(z_max[c] + 1))
         p.set(xlim=(0, z_max[c]), ylim=(0, z_max[c]))
-        plt.title(c)
+        plt.xlabel(get_plot_text('Z'))
+        plt.ylabel(get_plot_text(z_col))
+        plt.title(get_plot_text(c))
+        plt.show()
 
 
-# TODO: refactor, its doubled in classification_precision_z_report report
-def plot_z_hist(predictions, z_max=None):
-    predictions_zlim = predictions.loc[predictions['Z'] <= z_max]
-
-    n_bins = 40
-    # _, bin_edges = np.histogram(predictions_zlim['Z_PHOTO'], bins=n_bins)
-    predictions_zlim.loc[:, 'binned'] = pd.cut(predictions_zlim['Z'], n_bins)
-
-    counts_dict = {}  # final index: [predicted class][true class]
-    for i, class_pred in enumerate(BASE_CLASSES):
-        preds_class = predictions_zlim.loc[predictions_zlim['CLASS_PHOTO'] == class_pred]
-        counts_dict[class_pred] = preds_class.groupby(['binned', 'CLASS']).size().unstack(fill_value=0)
-        counts_dict[class_pred].loc[:, 'size'] = counts_dict[class_pred][BASE_CLASSES].sum(axis=1)
-
-    # Size plot
-    plt.figure()
-
+def plot_z_hists(preds, z_max=None):
+    preds_zlim = preds.loc[preds['Z'] <= z_max]
+    to_plot = [
+        ('Z', 'CLASS'),
+        ('Z_PHOTO', 'CLASS_PHOTO'),
+    ]
     color_palette = get_cubehelix_palette(len(BASE_CLASSES))
-    for i, class_pred in enumerate(BASE_CLASSES):
-        bin_edges_left = [v.left for v in counts_dict[class_pred].index]
-        size_list_norm = counts_dict[class_pred]['size'] / max(counts_dict[class_pred]['size'])
-        ax = sns.lineplot(bin_edges_left, size_list_norm, drawstyle='steps-pre', label=class_pred,
-                          color=color_palette[i])
-        ax.lines[i].set_linestyle(get_line_style(i))
+    for x_col, cls_col in to_plot:
+        is_cls_photo = (cls_col == 'CLASS_PHOTO')
+        plt.figure()
+        for i, cls in enumerate(BASE_CLASSES):
+            hist, bins = np.histogram(preds_zlim.loc[preds_zlim[cls_col] == cls][x_col], bins=40)
+            hist_norm = hist / max(hist)
+            ax = sns.lineplot(bins[:-1], hist_norm, drawstyle='steps-post', label=get_plot_text(cls, is_cls_photo),
+                              color=color_palette[i])
+            ax.lines[i].set_linestyle(get_line_style(i))
 
-    plt.xlabel('z')
-    plt.ylabel('number of objects in bin')
-    plt.legend()
+        plt.xlabel(get_plot_text(x_col))
+        plt.ylabel('normalized counts per bin')
+        plt.show()
 
 
-def classification_precision_z_report(predictions, z_max=None):
+def precision_z_report(predictions, col_true='CLASS', z_max=None):
     """
-    Compare precision against predicted redshift
+    Compare predicted classes against true redshifts
     :param predictions:
+    :param col_true:
     :param z_max:
     :return:
     """
     predictions_zlim = predictions.loc[predictions['Z'] <= z_max]
-
-    n_bins = 40
-    # _, bin_edges = np.histogram(predictions_zlim['Z_PHOTO'], bins=n_bins)
-    predictions_zlim.loc[:, 'binned'] = pd.cut(predictions_zlim['Z_PHOTO'], n_bins)
-
-    counts_dict = {}  # final index: [predicted class][true class]
-    for i, class_pred in enumerate(BASE_CLASSES):
-        preds_class = predictions_zlim.loc[predictions_zlim['CLASS_PHOTO'] == class_pred]
-        counts_dict[class_pred] = preds_class.groupby(['binned', 'CLASS']).size().unstack(fill_value=0)
-        counts_dict[class_pred].loc[:, 'size'] = counts_dict[class_pred][BASE_CLASSES].sum(axis=1)
-
-    # Precision plot
-    plt.figure()
     color_palette = get_cubehelix_palette(len(BASE_CLASSES))
-    for i, c in enumerate(BASE_CLASSES):
-        bin_edges_left = [v.left for v in counts_dict[c].index]
-        precision_list = counts_dict[c][c] / counts_dict[c]['size']
-        ax = sns.lineplot(bin_edges_left, precision_list, drawstyle='steps-pre', label=c, color=color_palette[i])
-        ax.lines[i].set_linestyle(get_line_style(i))
 
-    plt.xlabel('z photo')
-    plt.ylabel('purity')
-    plt.legend()
+    for cls_pred in BASE_CLASSES:
 
-    # True z size plot for comparison
-    plot_z_hist(predictions, z_max=z_max)
-
-    # Size plot
-    plt.figure()
-    for i, class_pred in enumerate(BASE_CLASSES):
-        bin_edges_left = [v.left for v in counts_dict[class_pred].index]
-        size_list_norm = counts_dict[class_pred]['size'] / max(counts_dict[class_pred]['size'])
-        ax = sns.lineplot(bin_edges_left, size_list_norm, drawstyle='steps-pre', label=class_pred,
-                          color=color_palette[i])
-        ax.lines[i].set_linestyle(get_line_style(i))
-
-    plt.xlabel('z photo')
-    plt.ylabel('number of predictions in bin')
-    plt.legend()
-
-    # Detailed plots
-    for class_pred in BASE_CLASSES:
-        bin_edges_left = [v.left for v in counts_dict[class_pred].index]
+        photo_class_as_dict = {}
+        for cls_true in BASE_CLASSES:
+            photo_class_as_dict[cls_true] = predictions_zlim.loc[
+                (predictions_zlim[col_true] == cls_true) & (predictions_zlim['CLASS_PHOTO'] == cls_pred)]['Z_PHOTO']
 
         plt.figure()
-        color_palette = get_cubehelix_palette(len(BASE_CLASSES))
-        for i, class_true in enumerate(BASE_CLASSES):
-            counts_per_class = counts_dict[class_pred][class_true] / counts_dict[class_pred]['size']
+        _, bin_edges = np.histogram(np.hstack((
+            photo_class_as_dict['QSO'],
+            photo_class_as_dict['STAR'],
+            photo_class_as_dict['GALAXY'],
+        )), bins=40)
 
-            ax = sns.lineplot(bin_edges_left, counts_per_class, drawstyle='steps-pre', label=class_true,
-                              color=color_palette[i])
-            ax.lines[i].set_linestyle(get_line_style(i))
+        for i, cls_true in enumerate(BASE_CLASSES):
+            hist_kws = {'alpha': 1.0, 'histtype': 'step', 'linewidth': 1.5, 'linestyle': get_line_style(i)}
+            label = '{} clf. as {}'.format(get_plot_text(cls_true), get_plot_text(cls_pred, is_photo=True))
+            ax = sns.distplot(photo_class_as_dict[cls_true], label=label, bins=bin_edges, kde=False, rug=False,
+                              color=color_palette[i], hist_kws=hist_kws)
+            ax.set(yscale='log')
 
-        plt.title('{} photo'.format(class_pred))
-        plt.xlabel('z photo')
-        plt.ylabel('purity')
-        plt.legend()
+        plt.xlabel(get_plot_text('Z_PHOTO'))
+        plt.ylabel('counts per bin')
+        plt.legend(loc='upper left')
+        plt.show()
 
 
 def classification_and_redshift_report(predictions):
@@ -325,51 +262,79 @@ def classification_and_redshift_report(predictions):
     color_palette = get_cubehelix_palette(len(classes))
 
     # True class plots
-    metrics_to_plot = OrderedDict([('MAE', mean_absolute_error), ('MSE', mean_squared_error)])
-    for metric_name, metric_func in metrics_to_plot.items():
+    metrics_to_plot = OrderedDict([('MSE', mean_squared_error)])
+    plots_to_make = ['CLASS', 'CLASS_PHOTO']
+    for cls_col in plots_to_make:
+        for metric_name, metric_func in metrics_to_plot.items():
 
-        plt.figure()
-        for i, c in enumerate(classes):
-            preds_class = predictions.loc[predictions['CLASS'] == c]
+            plt.figure()
+            for i, cls in enumerate(classes):
+                preds_class = predictions.loc[predictions[cls_col] == cls]
+                is_cls_photo = (cls == 'CLASS_PHOTO')
+                label = get_plot_text(cls, is_photo=is_cls_photo)
 
-            # Get scores limited by classification probability thresholds
-            metric_values = []
-            for thr in thresholds:
-                preds_lim = preds_class.loc[preds_class['{}_PHOTO'.format(c)] >= thr]
-                metric_values.append(np.around(metric_func(preds_lim['Z'], preds_lim['Z_PHOTO']), 4))
+                # Get scores limited by classification probability thresholds
+                metric_values = []
+                for thr in thresholds:
+                    preds_lim = preds_class.loc[preds_class['{}_PHOTO'.format(cls)] >= thr]
+                    metric_values.append(np.around(metric_func(preds_lim['Z'], preds_lim['Z_PHOTO']), 4))
 
-            plt.plot(thresholds, metric_values, label='true {}'.format(c), color=color_palette[i],
-                     linestyle=get_line_style(i))
-            plt.xlabel('minimum classification probability')
-            plt.ylabel(metric_name)
-            ax = plt.axes()
-            ax.yaxis.grid(True)
+                plt.plot(thresholds, metric_values, label=label, color=color_palette[i],
+                         linestyle=get_line_style(i))
+                plt.xlabel('minimum classification probability')
+                plt.ylabel(metric_name)
+                ax = plt.axes()
+                ax.yaxis.grid(True)
 
-        plt.legend()
+            plt.legend()
+            plt.show()
 
-    # TODO: refactor
-    # True class plots
-    metrics_to_plot = OrderedDict([('MSE', mean_absolute_error), ('MAE', mean_squared_error)])
-    for metric_name, metric_func in metrics_to_plot.items():
+    plot_proba_against_size(predictions.loc[predictions['CLASS_PHOTO'] == 'QSO'], column='QSO_PHOTO', x_lim=(0.3, 1))
 
-        plt.figure()
-        for i, c in enumerate(classes):
-            preds_class = predictions.loc[predictions['CLASS_PHOTO'] == c]
 
-            # Get scores limited by classification probability thresholds
-            metric_values = []
-            for thr in thresholds:
-                preds_lim = preds_class.loc[preds_class['{}_PHOTO'.format(c)] >= thr]
-                metric_values.append(np.around(metric_func(preds_lim['Z'], preds_lim['Z_PHOTO']), 4))
-
-            plt.plot(thresholds, metric_values, label='photo {}'.format(c), color=color_palette[i],
-                     linestyle=get_line_style(i))
-            plt.xlabel('minimum classification probability')
-            plt.ylabel(metric_name)
-            ax = plt.axes()
-            ax.yaxis.grid(True)
-
-        plt.legend()
+# TODO: has to be limited to narrow redshift range
+# def redshift_binned_stats(predictions):
+#     # Get bins
+#     classes = np.unique(predictions['CLASS'])
+#     redshifts_per_class_dict = {}
+#     for cls in classes:
+#         redshifts_per_class_dict[cls] = predictions.loc[predictions['CLASS'] == cls]['Z']
+#     _, bin_edges = np.histogram(np.hstack(
+#         (redshifts_per_class_dict['QSO'],
+#          redshifts_per_class_dict['STAR'],
+#          redshifts_per_class_dict['GALAXY'])),
+#         bins=40)
+#     predictions.loc[:, 'binned'] = pd.cut(predictions['Z'], bin_edges)
+#
+#     # Define metrics to apply on bins
+#     relative_err_str = r'$\frac{z_{photo} - z_{spec}}{1 + z_{spec}}$'
+#     score_funcs = [
+#         (relative_err_mean, relative_err_str + ' mean'),
+#         (relative_err_std, relative_err_str + ' std'),
+#         # TODO: make work for empty arrays, or remove empty array by cutting classes  independently
+#         # (r2_score, 'R2 score'),
+#     ]
+#
+#     # Get scores in bins
+#     score_dict = defaultdict(dict)
+#     for i, cls in enumerate(classes):
+#         preds_class = predictions.loc[predictions['CLASS'] == cls]
+#         grouped = preds_class.groupby(by='binned')
+#         for score_func, score_name in score_funcs:
+#             score_dict[score_name][cls] = grouped.apply(lambda frame: score_func(frame['Z'], frame['Z_PHOTO']))
+#
+#     # Plot errors in bins of predicted redshift
+#     color_palette = get_cubehelix_palette(len(classes))
+#     for _, score_name in score_funcs:
+#         x_dict = score_dict[score_name]
+#         plt.figure()
+#         for i, cls in enumerate(classes):
+#             ax = sns.lineplot(bin_edges[:-1], x_dict[cls], drawstyle='steps-pre', label=cls, color=color_palette[i])
+#             ax.lines[i].set_linestyle(get_line_style(i))
+#         plt.xlabel('redshift')
+#         plt.ylabel(score_name)
+#         plt.legend()
+#         plt.show()
 
 
 def metric_class_split(y_true, y_pred, classes, metric):

@@ -6,7 +6,7 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 
-from env_variables import DATA_PATH
+from env_config import DATA_PATH
 from utils import logger, save_predictions, save_model
 from data import get_mag_str, process_kids
 from experiments import kfold_validation, top_k_split, do_experiment

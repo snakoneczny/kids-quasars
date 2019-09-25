@@ -1,5 +1,6 @@
 import itertools
 from collections import OrderedDict
+import string
 
 import scipy
 import numpy as np
@@ -29,6 +30,25 @@ CUSTOM_COLORS = {
 }
 
 LINE_STYLES = ['-', '--', '-.', ':']
+
+PLOT_TEXTS = {
+    'GALAXY': r'$galaxy_{spec}$',
+    'STAR': r'$star_{spec}$',
+    'QSO': r'$QSO_{spec}$',
+    'GALAXY_PHOTO': r'$galaxy_{photo}$',
+    'STAR_PHOTO': r'$star_{photo}$',
+    'QSO_PHOTO': r'$QSO_{photo}$',
+    'Z': r'$z_{spec}$',
+    'Z_PHOTO': r'$z_{photo}$',
+    'Z_B': r'$z_{B}$',
+}
+
+
+def get_plot_text(str, is_photo=False):
+    plot_text = PLOT_TEXTS[str]
+    if is_photo:
+        plot_text = plot_text.replace('spec', 'photo')
+    return plot_text
 
 
 def get_line_style(i):
@@ -68,7 +88,10 @@ def plot_embedding(embedding, labels, label='class', is_continuous=False, alpha=
         cb = f.colorbar(points)
         cb.set_label(label)
 
+    plt.show()
 
+
+# TODO: make use of plot texts
 def plot_confusion_matrix(cm, classes, normalize=False, true_label='SDSS'):
     """
     This function prints and plots the confusion matrix.
@@ -81,8 +104,8 @@ def plot_confusion_matrix(cm, classes, normalize=False, true_label='SDSS'):
     plt.imshow(cm, interpolation='nearest', cmap=cmap)
     plt.colorbar()
     tick_marks = np.arange(len(classes))
-    plt.xticks(tick_marks, classes, rotation=45)
-    plt.yticks(tick_marks, classes)
+    plt.xticks(tick_marks, [get_plot_text(cls, is_photo=True) for cls in classes], rotation=45)
+    plt.yticks(tick_marks, [get_plot_text(cls) for cls in classes])
 
     fmt = '.2f' if normalize else 'd'
     thresh = cm.max() / 2.
@@ -93,8 +116,9 @@ def plot_confusion_matrix(cm, classes, normalize=False, true_label='SDSS'):
                  color='white' if cm[i, j] > thresh else 'black')
 
     plt.tight_layout()
-    plt.ylabel('{} - true label'.format(true_label))
-    plt.xlabel('KiDS - predicted label')
+    # plt.ylabel('{} - true label'.format(true_label))
+    # plt.xlabel('KiDS - predicted label')
+    plt.show()
 
 
 def plot_roc_curve(fpr, tpr, roc_auc):
@@ -122,6 +146,7 @@ def plot_precision_recall_curve(precisions, recalls, average_precision, precisio
     plt.ylim([0.0, 1.05])
     plt.xlim([0.0, 1.0])
     plt.title('Precision-Recall curve: AP={0:0.2f}'.format(average_precision))
+    plt.show()
 
 
 # TODO: maybe some more general plotting functions can be made
@@ -130,12 +155,13 @@ def plot_proba_histograms(data):
     color_palette = get_cubehelix_palette(len(columns))
     plt.figure()
     for i, column in enumerate(columns):
-        sns.distplot(data[column], label=column, kde=False, rug=False, norm_hist=True, color=color_palette[i],
+        sns.distplot(data[column], label=get_plot_text(column), kde=False, rug=False, norm_hist=True, color=color_palette[i],
                      hist_kws={'alpha': 1.0, 'histtype': 'step', 'linewidth': 1.5, 'linestyle': get_line_style(i)})
     plt.xlabel('probability')
     plt.ylabel('normalized counts per bin')
     plt.legend()
     plt.tight_layout()
+    plt.show()
 
 
 def plot_histograms(data_dict, columns=BAND_COLUMNS, x_lim_dict=None, title=None, pretty_print_function=None,
@@ -158,6 +184,7 @@ def plot_histograms(data_dict, columns=BAND_COLUMNS, x_lim_dict=None, title=None
         plt.legend(loc=legend_loc, prop=prop)
 
         plt.tight_layout()
+        plt.show()
 
 
 def plot_class_histograms(data, columns, class_column='CLASS', title=None, log_y=False):
@@ -171,6 +198,7 @@ def plot_class_histograms(data, columns, class_column='CLASS', title=None, log_y
         if title: plt.title(title)
         plt.xlabel(pretty_print_feature(c))
         plt.legend()
+        plt.show()
 
 
 def plot_map(hpxmap, unit='counts per pixel', is_cmap=True):
@@ -216,6 +244,7 @@ def plot_map_stats(m, lat, map_stars=None, title=None, xlim=None):
     plt.xlabel('pixel density')
     plt.ylabel('counts')
     plt.title(title)
+    plt.show()
 
 
 def plot_proba_against_size(data, column='QSO', x_lim=(0, 1), step=0.01):
@@ -223,8 +252,9 @@ def plot_proba_against_size(data, column='QSO', x_lim=(0, 1), step=0.01):
     data_size_arr = [data.loc[data[column] >= thr].shape[0] for thr in thresholds]
 
     plt.plot(thresholds, data_size_arr)
-    plt.xlabel('{} probability threshold'.format(column))
-    plt.ylabel('{} size'.format(column))
+    plt.xlabel('{} probability threshold'.format(get_plot_text(column, is_photo=True)))
+    plt.ylabel('{} size'.format(get_plot_text(column, is_photo=True)))
+    plt.show()
 
 
 def plot_external_qso_consistency(catalog):
@@ -276,6 +306,7 @@ def plot_external_qso_consistency(catalog):
     bounding_box.y0 += y_offset
     bounding_box.y1 += y_offset
     legend.set_bbox_to_anchor(bounding_box, transform=ax.transAxes)
+    plt.show()
 
 
 def plot_external_qso_size(data):
@@ -304,6 +335,7 @@ def plot_external_qso_size(data):
         plt.ylabel('cross match size')
 
     plt.legend()
+    plt.show()
 
 
 # TODO: intelligence of feature importance should not be here?

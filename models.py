@@ -33,6 +33,7 @@ def build_xgb_clf(params):
 
 
 def build_xgb_reg(params):
+    # TODO: reg:linear is now deprecated in favor of reg:squarederror
     # All classes
     if not params['specialization']:
         return XGBRegressor(

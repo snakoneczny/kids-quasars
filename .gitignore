@@ -9,9 +9,9 @@ plots/
 regions/
 report/
 maps/
-paper/
 outputs/
 logs/
 
 *.csv
 *.jpeg
+

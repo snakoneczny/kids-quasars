@@ -5,7 +5,7 @@ from collections import OrderedDict
 import pandas as pd
 from astropy.table import Table
 
-from env_variables import DATA_PATH
+from env_config import DATA_PATH
 
 EXTERNAL_QSO_PATHS = [
     os.path.join(DATA_PATH, 'KiDS/KiDS.DR3.x.2QZ6QZ.cols.csv'),
