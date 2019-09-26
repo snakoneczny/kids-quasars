@@ -5,13 +5,10 @@
 .ipynb_checkpoints/
 __pycache__/
 
-plots/
-regions/
-report/
-maps/
 outputs/
-logs/
+tensorboard/
+topcat_plots/
+archive/
 
 *.csv
 *.jpeg
-

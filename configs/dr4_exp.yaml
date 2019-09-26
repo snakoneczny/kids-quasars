@@ -4,13 +4,13 @@ inference_data: KiDS.DR4.merged
 
 cut:
 
-model: xgb
+model: ann
 
 pred_class: False
 
 pred_z: True
 
-specialization:
+specialization: GALAXY
 
 bands: [u, g, r, i, Z, Y, J, H, Ks]
 

@@ -270,7 +270,7 @@ def classification_and_redshift_report(predictions):
             plt.figure()
             for i, cls in enumerate(classes):
                 preds_class = predictions.loc[predictions[cls_col] == cls]
-                is_cls_photo = (cls == 'CLASS_PHOTO')
+                is_cls_photo = (cls_col == 'CLASS_PHOTO')
                 label = get_plot_text(cls, is_photo=is_cls_photo)
 
                 # Get scores limited by classification probability thresholds

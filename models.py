@@ -127,7 +127,7 @@ class AnnReg(BaseEstimator):
         self.network = None
         self.scaler = MinMaxScaler()
         self.epochs = 4000
-        self.patience = 600
+        self.patience = 400
         self.batch_size = 256
         self.lr = 0.0001
 
@@ -250,7 +250,7 @@ class AstroNet(BaseEstimator):
 class CustomTensorBoard(TensorBoard):
     def __init__(self, log_folder, params):
         self.params_exp = params
-        log_dir = './logs/exp/{}'.format(log_folder)
+        log_dir = './tensorboard/exp/{}'.format(log_folder)
         super().__init__(log_dir=log_dir)
 
     def on_epoch_end(self, epoch, logs=None):
