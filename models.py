@@ -86,8 +86,8 @@ class AnnClf(BaseEstimator):
 
     def __create_network(self, params):
         model = Sequential()
-        model.add(Dense(60, input_dim=params['n_features'], activation='relu'))
-        model.add(Dense(60, activation='relu'))
+        model.add(Dense(80, input_dim=params['n_features'], activation='relu'))
+        model.add(Dense(80, activation='relu'))
         model.add(Dense(40, activation='relu'))
         model.add(Dense(40, activation='relu'))
         model.add(Dense(20, activation='relu'))
@@ -182,7 +182,7 @@ class AstroNet(BaseEstimator):
         self.network = None
         self.scaler = MinMaxScaler()
         self.epochs = 4000
-        self.patience = 600
+        self.patience = 400
         self.batch_size = 256
         self.lr = 0.0001
 
@@ -198,20 +198,19 @@ class AstroNet(BaseEstimator):
         inputs = Input(shape=(params['n_features'],))
 
         # Main branch
-        x = Dense(60, activation='relu')(inputs)
-        x = Dense(60, activation='relu')(x)
+        x = Dense(80, activation='relu')(inputs)
+        x = Dense(80, activation='relu')(x)
         x = Dense(40, activation='relu')(x)
         x = Dense(40, activation='relu')(x)
         x = Dense(20, activation='relu')(x)
         x = Dense(20, activation='relu')(x)
+        x = Dense(10, activation='relu')(x)
 
         # Outputs
         y = Dense(10, activation='relu')(x)
-        y = Dense(10, activation='relu')(y)
         preds_y = Dense(3, activation='softmax', name='category')(y)
 
         z = Dense(20, activation='relu')(x)
-        z = Dense(20, activation='relu')(z)
         preds_z = Dense(1, name='redshift')(z)
 
         model = Model(inputs=inputs, outputs=[preds_y, preds_z], name='astronet')

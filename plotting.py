@@ -1,6 +1,5 @@
 import itertools
 from collections import OrderedDict
-import string
 
 import scipy
 import numpy as np
@@ -91,8 +90,7 @@ def plot_embedding(embedding, labels, label='class', is_continuous=False, alpha=
     plt.show()
 
 
-# TODO: make use of plot texts
-def plot_confusion_matrix(cm, classes, normalize=False, true_label='SDSS'):
+def plot_confusion_matrix(cm, classes, normalize=False):
     """
     This function prints and plots the confusion matrix.
     Normalization can be applied by setting `normalize=True`.
@@ -111,13 +109,12 @@ def plot_confusion_matrix(cm, classes, normalize=False, true_label='SDSS'):
     thresh = cm.max() / 2.
     for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
         str = format(cm[i, j], fmt)
-        if normalize: str += '%'
+        if normalize:
+            str += '%'
         plt.text(j, i, str, horizontalalignment='center',
                  color='white' if cm[i, j] > thresh else 'black')
 
     plt.tight_layout()
-    # plt.ylabel('{} - true label'.format(true_label))
-    # plt.xlabel('KiDS - predicted label')
     plt.show()
 
 
@@ -149,7 +146,6 @@ def plot_precision_recall_curve(precisions, recalls, average_precision, precisio
     plt.show()
 
 
-# TODO: maybe some more general plotting functions can be made
 def plot_proba_histograms(data):
     columns = ['{}_PHOTO'.format(c) for c in BASE_CLASSES]
     color_palette = get_cubehelix_palette(len(columns))
