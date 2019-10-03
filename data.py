@@ -19,8 +19,15 @@ EXTERNAL_QSO_DICT = OrderedDict(
 
 BASE_CLASSES = ['QSO', 'STAR', 'GALAXY']
 
-COLUMNS_KIDS = ['ID', 'RAJ2000', 'DECJ2000', 'Flag', 'CLASS_STAR', 'SG2DPHOT', 'Z_B']
+COLUMNS_KIDS = ['ID', 'RAJ2000', 'DECJ2000', 'Flag', 'MASK', 'CLASS_STAR', 'SG2DPHOT', 'Z_B']
 COLUMNS_SDSS = ['CLASS', 'SUBCLASS', 'Z', 'Z_ERR', 'ZWARNING', 'Z_NOQSO', 'Z_ERR_NOQSO', 'ZWARNING_NOQSO']
+
+BITMAP_LENGTHS = {
+    'Flag': 8,
+    'IMAFLAGS_ISO': 7,
+    'SG2DPHOT': 3,
+    'MASK': 16,
+}
 
 
 def get_mag_str(band):
@@ -108,14 +115,15 @@ def get_band_features(bands):
 
 
 FEATURES = {
-    'all': BAND_COLUMNS + COLOR_COLUMNS + RATIO_COLUMNS + ['CLASS_STAR', 'SG2DPHOT_4'],
-    'top-clf': BAND_COLUMNS + COLOR_COLUMNS_CLF + RATIO_COLUMNS_CLF + ['CLASS_STAR', 'SG2DPHOT_4'],
-    'top-reg': BAND_COLUMNS + COLOR_COLUMNS_REG + RATIO_COLUMNS_REG + ['CLASS_STAR', 'SG2DPHOT_4'],
-    'no-u': get_band_features(['g', 'r', 'i', 'Z', 'Y', 'J', 'H', 'Ks']) + ['CLASS_STAR', 'SG2DPHOT_4'],
+    'all': BAND_COLUMNS + COLOR_COLUMNS + RATIO_COLUMNS + ['CLASS_STAR', 'SG2DPHOT_3'],
+    'top-clf': BAND_COLUMNS + COLOR_COLUMNS_CLF + RATIO_COLUMNS_CLF + ['CLASS_STAR', 'SG2DPHOT_3'],
+    'top-reg': BAND_COLUMNS + COLOR_COLUMNS_REG + RATIO_COLUMNS_REG + ['CLASS_STAR', 'SG2DPHOT_3'],
+    'no-u': get_band_features(['g', 'r', 'i', 'Z', 'Y', 'J', 'H', 'Ks']) + ['CLASS_STAR', 'SG2DPHOT_3'],
+    'no-sg': BAND_COLUMNS + COLOR_COLUMNS + RATIO_COLUMNS,
 }
 
 
-def process_kids(path, bands=BANDS, sdss_cleaning=False, cut=None, n=None, with_print=True):
+def process_kids(path, bands=BANDS, kids_cleaning=True, sdss_cleaning=False, cut=None, n=None, with_print=True):
     skiprows = get_skiprows(path, n) if n is not None else None
 
     extension = path.split('.')[-1]
@@ -126,7 +134,8 @@ def process_kids(path, bands=BANDS, sdss_cleaning=False, cut=None, n=None, with_
     else:
         raise (Exception('Not supported file type {} in {}'.format(extension, path)))
 
-    return process_kids_data(data, bands=bands, sdss_cleaning=sdss_cleaning, cut=cut, with_print=with_print)
+    return process_kids_data(data, bands=bands, kids_cleaning=kids_cleaning, sdss_cleaning=sdss_cleaning, cut=cut,
+                             with_print=with_print)
 
 
 def read_fits_to_pandas(filepath, columns=None):
@@ -154,10 +163,12 @@ def read_fits_to_pandas(filepath, columns=None):
     return table
 
 
-def process_kids_data(data, bands=BANDS, cut=None, sdss_cleaning=False, with_print=True):
-    if with_print: print('Data shape: {}'.format(data.shape))
+def process_kids_data(data, bands=BANDS, cut=None, kids_cleaning=True, sdss_cleaning=False, with_print=True):
+    if with_print:
+        print('Data shape: {}'.format(data.shape))
 
-    data = clean_kids(data, bands=bands, with_print=with_print)
+    if kids_cleaning:
+        data = clean_kids(data, bands=bands, with_print=with_print)
 
     if sdss_cleaning:
         data = clean_sdss(data)
@@ -167,7 +178,7 @@ def process_kids_data(data, bands=BANDS, cut=None, sdss_cleaning=False, with_pri
 
     data = add_colors(data)
     data = add_magnitude_ratio(data)
-    data = process_sg2dphot(data)
+    data = process_bitmaps(data)
 
     return data.reset_index(drop=True)
 
@@ -192,13 +203,13 @@ def clean_kids(data, bands=BANDS, with_print=True):
     mask = [True] * data_no_na.shape[0]
 
     # Remove errors
-    magerr_gaap_columns = get_magerr_gaap_cols(bands)
-    for c in magerr_gaap_columns:
-        mask &= (data_no_na[c] < 1)
-    if with_print:
-        n_left = mask.sum()
-        p_left = mask.sum() / data.shape[0] * 100
-        print('Removing errors bigger than 1: {} ({:.2f}%) left'.format(n_left, p_left))
+    # magerr_gaap_columns = get_magerr_gaap_cols(bands)
+    # for c in magerr_gaap_columns:
+    #     mask &= (data_no_na[c] < 1)
+    # if with_print:
+    #     n_left = mask.sum()
+    #     p_left = mask.sum() / data.shape[0] * 100
+    #     print('Removing errors bigger than 1: {} ({:.2f}%) left'.format(n_left, p_left))
 
     # Survey limiting magnitudes
     # mask &= (
@@ -213,21 +224,21 @@ def clean_kids(data, bands=BANDS, with_print=True):
     #     print('Removing limiting magnitudes: {} ({:.2f}%) left'.format(n_left, p_left))
 
     # Remove flags
-    flags_gaap = get_flags_gaap_cols(bands)
-    for c in flags_gaap:
-        mask &= (data_no_na[c] == 0)
-    if with_print:
-        n_left = mask.sum()
-        p_left = mask.sum() / data.shape[0] * 100
-        print('Removing GAAP flags: {} ({:.2f}%) left'.format(n_left, p_left))
+    # flags_gaap = get_flags_gaap_cols(bands)
+    # for c in flags_gaap:
+    #     mask &= (data_no_na[c] == 0)
+    # if with_print:
+    #     n_left = mask.sum()
+    #     p_left = mask.sum() / data.shape[0] * 100
+    #     print('Removing GAAP flags: {} ({:.2f}%) left'.format(n_left, p_left))
 
     # Remove ima-flags
-    flag_mask = 0b0111111
-    mask &= (data_no_na['IMAFLAGS_ISO'] & flag_mask == 0)
-    if with_print:
-        n_left = mask.sum()
-        p_left = mask.sum() / data.shape[0] * 100
-        print('Removing IMA flags: {} ({:.2f}%) left'.format(n_left, p_left))
+    # flag_mask = 0b0111111
+    # mask &= (data_no_na['IMAFLAGS_ISO'] & flag_mask == 0)
+    # if with_print:
+    #     n_left = mask.sum()
+    #     p_left = mask.sum() / data.shape[0] * 100
+    #     print('Removing IMA flags: {} ({:.2f}%) left'.format(n_left, p_left))
 
     return data_no_na.loc[mask].reset_index(drop=True)
 
@@ -278,16 +289,13 @@ def add_magnitude_ratio(data):
     return data
 
 
-def process_sg2dphot(data):
-    # 0 = all other sources (e.g. including galaxies).
-    # 1 = high confidence star candidate;
-    # 2 = unreliable source (e.g. cosmic ray);
-    # 4 = star according to star/galaxy separation criteria;
-    # Sources identified as stars can thus have a flag value of 1, 4 or 5.
-    data.loc[:, 'SG2DPHOT'] = data['SG2DPHOT'].astype(int)
-    data.loc[:, 'SG2DPHOT_1'] = data['SG2DPHOT'] & 0b001
-    data.loc[:, 'SG2DPHOT_2'] = data['SG2DPHOT'] & 0b010
-    data.loc[:, 'SG2DPHOT_4'] = data['SG2DPHOT'] & 0b100
+def process_bitmaps(data, bitmap_cols=None):
+    bitmap_cols = BITMAP_LENGTHS.keys() if not bitmap_cols else bitmap_cols
+    for bitmap_col in bitmap_cols:
+        data.loc[:, bitmap_col] = data[bitmap_col].astype(int)
+        for i in range(BITMAP_LENGTHS[bitmap_col]):
+            position = 2 ** i
+            data.loc[:, '{}_{}'.format(bitmap_col, i + 1)] = ((data[bitmap_col] & position) != 0).astype(int)
     return data
 
 

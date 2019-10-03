@@ -82,7 +82,7 @@ class AnnClf(BaseEstimator):
 
         early_stopping = EarlyStopping(monitor='val_loss', patience=self.patience, restore_best_weights=True)
         tensorboard = CustomTensorBoard(log_folder=log_name, params=self.params_exp)
-        self.callbacks = [early_stopping, tensorboard]
+        self.callbacks = [early_stopping, tensorboard]  # TODO: Add test which removes logging?
 
     def __create_network(self, params):
         model = Sequential()

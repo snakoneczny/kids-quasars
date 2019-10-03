@@ -40,6 +40,7 @@ PLOT_TEXTS = {
     'Z': r'$z_{spec}$',
     'Z_PHOTO': r'$z_{photo}$',
     'Z_B': r'$z_{B}$',
+    'Z_ML': r'$Z_{ML}$',
 }
 
 

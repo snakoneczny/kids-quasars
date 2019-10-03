@@ -5,7 +5,7 @@ import scipy
 import numpy as np
 import pandas as pd
 from scipy import stats
-from sklearn.externals import joblib
+import joblib
 
 logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s', datefmt='%d/%m/%Y %H:%M:%S', level=logging.INFO)
 logger = logging.getLogger(__name__)

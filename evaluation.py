@@ -63,9 +63,9 @@ def multiclass_report(predictions, col_true='CLASS', true_label='SDSS'):
     # Confusion matrices
     cnf_matrix = confusion_matrix(y_true, y_pred)
     plt.figure()
-    plot_confusion_matrix(cnf_matrix, classes=class_names, true_label=true_label)
+    plot_confusion_matrix(cnf_matrix, classes=class_names)
     plt.figure()
-    plot_confusion_matrix(cnf_matrix, classes=class_names, normalize=True, true_label=true_label)
+    plot_confusion_matrix(cnf_matrix, classes=class_names, normalize=True)
     plt.show()
 
     plot_proba_histograms(predictions)
@@ -169,6 +169,8 @@ def redshift_scatter_plots(predictions, z_max):
     plot_z_true_vs_pred(predictions, 'Z_PHOTO', z_max)
     # Plot Z_B for comparison
     plot_z_true_vs_pred(predictions, 'Z_B', z_max)
+    # Plot Z_ML for comparison
+    plot_z_true_vs_pred(predictions, 'Z_ML', z_max)
 
 
 def plot_z_true_vs_pred(predictions, z_col, z_max):
