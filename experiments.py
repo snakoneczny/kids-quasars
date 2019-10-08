@@ -9,7 +9,7 @@ from sklearn.metrics import accuracy_score, f1_score, mean_squared_error, mean_a
 
 from utils import logger, safe_indexing
 from evaluation import metric_class_split
-from models import get_single_problem_predictions
+from models import get_single_problem_predictions, build_outputs, build_ann_validation_data, build_xgb_validation_data
 
 # Define validation metrics
 metrics_classification = OrderedDict([
@@ -33,9 +33,7 @@ def do_experiment(data, model, cfg, encoder, X_train, X_test, y_train, y_test, z
     test_scores_params = {'X_test': X_test, 'y_test': y_test, 'z_test': z_test}
     if cfg['specialization']:
         mask = (y_train == encoder.transform([cfg['specialization']])[0])
-        X_train = X_train[mask]
-        y_train = y_train[mask]
-        z_train = z_train[mask]
+        X_train, y_train, z_train = X_train[mask], y_train[mask], z_train[mask]
 
         mask = (y_test == encoder.transform([cfg['specialization']])[0])
         test_scores_params = {'X_test': X_test[mask], 'y_test': y_test[mask], 'z_test': z_test[mask]}
@@ -186,37 +184,3 @@ def value_split(*arrays, value):
     ind_low = np.where(arrays[0] < value)[0]
 
     return list(chain.from_iterable((safe_indexing(a, ind_low), safe_indexing(a, ind_top)) for a in arrays))
-
-
-def build_ann_output_dict(y, z, cfg):
-    outputs = {}
-    if cfg['pred_class']:
-        outputs['category'] = y
-    if cfg['pred_z']:
-        outputs['redshift'] = z
-    return outputs
-
-
-def build_outputs(y, z, cfg):
-    if cfg['model'] == 'ann':
-        outputs = build_ann_output_dict(y, z, cfg)
-    else:
-        if cfg['pred_class']:
-            outputs = y
-        else:
-            outputs = z
-    return outputs
-
-
-def build_ann_validation_data(X_val, y_val, z_val, cfg):
-    validation_outputs = build_ann_output_dict(y_val, z_val, cfg)
-    validation_data = (X_val, validation_outputs)
-    return validation_data
-
-
-def build_xgb_validation_data(X_val, y_val, z_val, cfg):
-    if cfg['pred_class']:
-        val_list = [(X_val, y_val)]
-    else:
-        val_list = [(X_val, z_val)]
-    return val_list

@@ -1,11 +1,14 @@
 import logging
 import math
+from os import path
 
 import scipy
 import numpy as np
 import pandas as pd
 from scipy import stats
 import joblib
+
+from env_config import DATA_PATH
 
 logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s', datefmt='%d/%m/%Y %H:%M:%S', level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -207,7 +210,8 @@ def save_model(model, exp_name, timestamp):
 
 
 def save_catalog(catalog, exp_name, timestamp):
-    catalog_path = 'outputs/catalogs/{exp_name}__{timestamp}.csv'.format(exp_name=exp_name,
-                                                                         timestamp=timestamp)
+    logger.info('Saving catalog..')
+    catalog_path = path.join(DATA_PATH, 'KiDS/DR4/catalogs/{exp_name}__{timestamp}.csv'.format(exp_name=exp_name,
+                                                                                               timestamp=timestamp))
     catalog.to_csv(catalog_path, index=False)
     logger.info('catalog saved to: {}'.format(catalog_path))

@@ -4,11 +4,13 @@ import datetime
 from data import FEATURES
 
 
-def get_config(args):
+def get_config(args, is_inference=False):
     cfg = vars(args).copy()
 
     with open(cfg['config_file'], 'r') as config_file:
         cfg.update(yaml.load(config_file))
+
+    cfg['is_inference'] = is_inference
 
     # Add experiment start timestamp
     cfg['timestamp_start'] = datetime.datetime.now().strftime('%Y-%m-%d_%H:%M:%S')
@@ -27,8 +29,11 @@ def get_config(args):
 
 
 def add_experiment_name(cfg):
-    cfg['exp_name'] = '{model}_f-{features}_test-{test}'.format(
-        model=cfg['model'], features=cfg['features_key'], test=cfg['test'])
+    cfg['exp_name'] = '{model}_f-{features}'.format(
+        model=cfg['model'], features=cfg['features_key'])
+
+    if not cfg['is_inference']:
+        cfg['exp_name'] += '_test-{test}'.format(test=cfg['test'])
 
     if cfg['specialization']:
         cfg['exp_name'] += '_spec-{}'.format(cfg['specialization'].lower())

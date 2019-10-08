@@ -14,7 +14,7 @@ from keras.callbacks import TensorBoard, EarlyStopping
 
 def build_rf_clf(params):
     return RandomForestClassifier(
-        n_estimators=400, criterion='gini', random_state=491237, n_jobs=12,
+        n_estimators=400, criterion='gini', random_state=491237, n_jobs=24,
     )
 
 
@@ -25,10 +25,18 @@ def build_rf_reg(params):
 
 
 def build_xgb_clf(params):
+    if params['is_test']:
+        n_estimators = 10
+    elif params['is_inference']:
+        n_estimators = 380
+    else:
+        n_estimators = 100000
+
     return XGBClassifier(
         max_depth=7, learning_rate=0.1, gamma=0, min_child_weight=1, colsample_bytree=0.7, subsample=0.8,
-        scale_pos_weight=2, reg_alpha=0, reg_lambda=1, n_estimators=100000, objective='multi:softmax', booster='gbtree',
-        max_delta_step=0, colsample_bylevel=1, base_score=0.5, random_state=18235, missing=None, verbosity=0, n_jobs=12,
+        scale_pos_weight=2, reg_alpha=0, reg_lambda=1, n_estimators=n_estimators, objective='multi:softmax',
+        booster='gbtree', max_delta_step=0, colsample_bylevel=1, base_score=0.5, random_state=18235, missing=None,
+        verbosity=0, n_jobs=24,
     )
 
 
@@ -70,19 +78,27 @@ class AnnClf(BaseEstimator):
         self.params_exp = params
         self.network = None
         self.scaler = MinMaxScaler()
-        self.epochs = 2000
         self.patience = 400
         self.batch_size = 256
         self.lr = 0.0001
 
-        log_name = 'class, lr={}, bs={}, {}'.format(self.lr, self.batch_size,
-                                                    params['timestamp_start'].replace('_', ' '))
+        if params['is_test']:
+            self.epochs = 10
+        elif params['is_inference']:
+            self.epochs = 400
+        else:
+            self.epochs = 2000
+
+        log_name = 'clf, lr={}, bs={}, {}'.format(self.lr, self.batch_size, params['timestamp_start'].replace('_', ' '))
         if params['tag']:
             log_name = '{}, {}'.format(params['tag'], log_name)
 
-        early_stopping = EarlyStopping(monitor='val_loss', patience=self.patience, restore_best_weights=True)
-        tensorboard = CustomTensorBoard(log_folder=log_name, params=self.params_exp)
-        self.callbacks = [early_stopping, tensorboard]  # TODO: Add test which removes logging?
+        self.callbacks = []
+        if not self.params_exp['is_inference']:
+            self.callbacks.append(EarlyStopping(monitor='val_loss', patience=self.patience, restore_best_weights=True))
+        if not self.params_exp['test']:
+            self.callbacks.append(CustomTensorBoard(log_folder=log_name, params=self.params_exp,
+                                                    is_inference=self.params_exp['is_inference']))
 
     def __create_network(self, params):
         model = Sequential()
@@ -106,9 +122,9 @@ class AnnClf(BaseEstimator):
     def fit(self, X, y, validation_data=None):
         X = self.scaler.fit_transform(X)
         y['category'] = np_utils.to_categorical(y['category'])
-        validation_data = (self.scaler.transform(validation_data[0]),
-                           {'category': np_utils.to_categorical(validation_data[1]['category'])})
-
+        if validation_data:
+            validation_data = (self.scaler.transform(validation_data[0]),
+                               {'category': np_utils.to_categorical(validation_data[1]['category'])})
         self.network = self.__create_network(self.params_exp)
         self.network.fit(X, y, validation_data=validation_data, epochs=self.epochs, batch_size=self.batch_size,
                          callbacks=self.callbacks, verbose=1)
@@ -126,19 +142,33 @@ class AnnReg(BaseEstimator):
         self.params_exp = params
         self.network = None
         self.scaler = MinMaxScaler()
-        self.epochs = 4000
         self.patience = 400
         self.batch_size = 256
         self.lr = 0.0001
 
-        log_name = 'redshift, lr={}, bs={}, {}'.format(self.lr, self.batch_size,
-                                                       params['timestamp_start'].replace('_', ' '))
+        if params['is_test']:
+            self.epochs = 10
+        elif params['is_inference']:
+            if params['specialization'] == 'QSO':
+                self.epochs = 320
+            elif params['specialization'] == 'GALAXY':
+                self.epochs = 200
+            else:
+                self.epochs = 340
+        else:
+            self.epochs = 4000
+
+        base_name = 'z-{}'.format(params['specialization']).lower() if params['specialization'] else 'z'
+        log_name = '{}, lr={}, bs={}, {}'.format(base_name, self.lr, self.batch_size,
+                                                 params['timestamp_start'].replace('_', ' '))
         if params['tag']:
             log_name = '{}, {}'.format(params['tag'], log_name)
 
-        early_stopping = EarlyStopping(monitor='val_loss', patience=self.patience, restore_best_weights=True)
-        tensorboard = CustomTensorBoard(log_folder=log_name, params=self.params_exp)
-        self.callbacks = [early_stopping, tensorboard]
+        self.callbacks = []
+        if not (self.params_exp['is_inference'] or self.params_exp['is_test']):
+            self.callbacks.append(EarlyStopping(monitor='val_loss', patience=self.patience, restore_best_weights=True))
+            self.callbacks.append(CustomTensorBoard(log_folder=log_name, params=self.params_exp,
+                                                    is_inference=self.params_exp['is_inference']))
 
     def __create_network(self, params):
         model = Sequential()
@@ -161,9 +191,9 @@ class AnnReg(BaseEstimator):
 
     def fit(self, X, y, validation_data=None):
         X = self.scaler.fit_transform(X)
-        validation_data = (self.scaler.transform(validation_data[0]),
-                           {'redshift': validation_data[1]['redshift']})
-
+        if validation_data:
+            validation_data = (self.scaler.transform(validation_data[0]),
+                               {'redshift': validation_data[1]['redshift']})
         self.network = self.__create_network(self.params_exp)
         self.network.fit(X, y, validation_data=validation_data, epochs=self.epochs, batch_size=self.batch_size,
                          callbacks=self.callbacks, verbose=1)
@@ -247,9 +277,10 @@ class AstroNet(BaseEstimator):
 
 
 class CustomTensorBoard(TensorBoard):
-    def __init__(self, log_folder, params):
+    def __init__(self, log_folder, params, is_inference):
         self.params_exp = params
-        log_dir = './tensorboard/exp/{}'.format(log_folder)
+        subfolder = 'inf' if is_inference else 'exp'
+        log_dir = './outputs/tensorboard/{}/{}'.format(subfolder, log_folder)
         super().__init__(log_dir=log_dir)
 
     def on_epoch_end(self, epoch, logs=None):
@@ -276,7 +307,7 @@ class CustomTensorBoard(TensorBoard):
             logs_to_send.pop('val_{}'.format(str), None)
 
         # Standalone problems, add category or redshift to metric names
-        if not(self.params_exp['pred_class'] and self.params_exp['pred_z']):
+        if not (self.params_exp['pred_class'] and self.params_exp['pred_z']):
             t = 'category' if self.params_exp['pred_class'] else 'redshift'
             metrics = ['categorical_crossentropy', 'acc'] if self.params_exp['pred_class'] \
                 else ['mean_squared_error', 'mean_absolute_error']
@@ -301,7 +332,7 @@ def create_multioutput_data(y, validation_data, scaler):
 
 # TODO: this should be in a pipeline for non ann models, also encoder usage is multiplied in networks and here
 def get_single_problem_predictions(model, X, encoder, cfg):
-    params_pred = {'ntree_limit': model.best_ntree_limit} if cfg['model'] == 'xgb' and model.best_ntree_limit else {}
+    params_pred = {'ntree_limit': model.best_ntree_limit} if hasattr(model, 'best_ntree_limit') else {}
     if cfg['pred_class']:
         y_pred_proba = model.predict_proba(X, **params_pred)
         predictions = decode_clf_preds(y_pred_proba, encoder)
@@ -336,3 +367,37 @@ def get_model(cfg):
 
     model = constructors[name](cfg)
     return model
+
+
+def build_ann_output_dict(y, z, cfg):
+    outputs = {}
+    if cfg['pred_class']:
+        outputs['category'] = y
+    if cfg['pred_z']:
+        outputs['redshift'] = z
+    return outputs
+
+
+def build_outputs(y, z, cfg):
+    if cfg['model'] == 'ann':
+        outputs = build_ann_output_dict(y, z, cfg)
+    else:
+        if cfg['pred_class']:
+            outputs = y
+        else:
+            outputs = z
+    return outputs
+
+
+def build_ann_validation_data(X_val, y_val, z_val, cfg):
+    validation_outputs = build_ann_output_dict(y_val, z_val, cfg)
+    validation_data = (X_val, validation_outputs)
+    return validation_data
+
+
+def build_xgb_validation_data(X_val, y_val, z_val, cfg):
+    if cfg['pred_class']:
+        val_list = [(X_val, y_val)]
+    else:
+        val_list = [(X_val, z_val)]
+    return val_list

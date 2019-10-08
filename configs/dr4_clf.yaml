@@ -1,0 +1,19 @@
+train_data: KiDS.DR4.x.SDSS.DR14
+
+inference_data: KiDS.DR4.merged.cols
+
+model: xgb
+
+pred_class: True
+
+pred_z: False
+
+specialization:
+
+cut:
+
+bands: [u, g, r, i, Z, Y, J, H, Ks]
+
+features_key: all
+
+test_method: magnitude

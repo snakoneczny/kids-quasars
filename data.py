@@ -124,12 +124,11 @@ FEATURES = {
 
 
 def process_kids(path, bands=BANDS, kids_cleaning=True, sdss_cleaning=False, cut=None, n=None, with_print=True):
-    skiprows = get_skiprows(path, n) if n is not None else None
-
     extension = path.split('.')[-1]
     if extension == 'fits':
-        data = read_fits_to_pandas(path)
+        data = read_fits_to_pandas(path, n=n)
     elif extension == 'csv':
+        skiprows = get_skiprows(path, n) if n is not None else None
         data = pd.read_csv(path, skiprows=skiprows)
     else:
         raise (Exception('Not supported file type {} in {}'.format(extension, path)))
@@ -138,16 +137,18 @@ def process_kids(path, bands=BANDS, kids_cleaning=True, sdss_cleaning=False, cut
                              with_print=with_print)
 
 
-def read_fits_to_pandas(filepath, columns=None):
+def read_fits_to_pandas(filepath, columns=None, n=None):
     table = Table.read(filepath, format='fits')
+
+    # Get first n rows if limit specified
+    if n: table = table[0:n]
 
     # Limit table to useful columns and check if SDSS columns are present from cross-matching
     if columns is None:
         columns_errors = ['MAGERR_GAAP_{}'.format(band) for band in BANDS]
         columns = COLUMNS_KIDS + BAND_COLUMNS + COLOR_NEXT_COLUMNS + columns_errors + FLAGS_GAAP_COLUMNS + [
-            'IMAFLAGS_ISO']
-        if COLUMNS_SDSS[0] in table.columns:
-            columns += COLUMNS_SDSS
+            'IMAFLAGS_ISO'] + COLUMNS_SDSS
+        columns = [col for col in columns if col in table.columns]
     # Get proper columns into a pandas data frame
     table = table[columns].to_pandas()
 
@@ -292,6 +293,8 @@ def add_magnitude_ratio(data):
 def process_bitmaps(data, bitmap_cols=None):
     bitmap_cols = BITMAP_LENGTHS.keys() if not bitmap_cols else bitmap_cols
     for bitmap_col in bitmap_cols:
+        if bitmap_col not in data:
+            continue
         data.loc[:, bitmap_col] = data[bitmap_col].astype(int)
         for i in range(BITMAP_LENGTHS[bitmap_col]):
             position = 2 ** i

@@ -1,11 +1,12 @@
 import argparse
-from config_parser import get_config
+from os import path
 
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 
+from config_parser import get_config
 from env_config import DATA_PATH
 from utils import logger, save_predictions, save_model
 from data import get_mag_str, process_kids
@@ -17,13 +18,14 @@ parser = argparse.ArgumentParser()
 parser.add_argument('-c', '--config', dest='config_file', required=True, help='config file name')
 parser.add_argument('-s', '--save', dest='save', action='store_true', help='flag for predictions saving')
 parser.add_argument('-t', '--tag', dest='tag', help='experiment tag, added to logs name')
+parser.add_argument('--test', dest='test', action='store_true', help='indicate test run')
 args = parser.parse_args()
 
 cfg = get_config(args)
 model = get_model(cfg)
 
 # Read data
-data_path = '{}/KiDS/DR4/{train_data}.fits'.format(DATA_PATH, train_data=cfg['train_data'])
+data_path = path.join(DATA_PATH, 'KiDS/DR4/{train_data}.fits'.format(train_data=cfg['train_data']))
 data = process_kids(data_path, bands=cfg['bands'], cut=cfg['cut'], sdss_cleaning=True)
 
 # Get X and y
@@ -40,7 +42,7 @@ y_encoded = encoder.transform(y)
 classes = np.unique(y)
 logger.info('Available classes: {}'.format(np.unique(y, return_counts=True)))
 
-if cfg['test'] == 'kfold':
+if cfg['test_method'] == 'kfold':
 
     # Train test split
     X_train_val, X_test, y_train_val, y_test, z_train_val, z_test, idx_train_val, idx_test = train_test_split(
@@ -60,7 +62,7 @@ if cfg['test'] == 'kfold':
     logger.info(validation_report)
     logger.info(test_report)
 
-elif cfg['test'] == 'random':
+elif cfg['test_method'] == 'random':
     # Train test split
     X_train, X_test, y_train, y_test, z_train, z_test, idx_train, idx_test = train_test_split(
         X, y_encoded, z, data.index, test_size=0.2, random_state=427)
@@ -72,7 +74,7 @@ elif cfg['test'] == 'random':
     # Finish by showing reports
     logger.info(report)
 
-elif cfg['test'] == 'magnitude':
+elif cfg['test_method'] == 'magnitude':
     # Train test split
     _, _, X_train, X_test, y_train, y_test, z_train, z_test, idx_train, idx_test = \
         top_k_split(data[get_mag_str('r')], X, y_encoded, z, data.index, test_size=0.1)
@@ -85,7 +87,7 @@ elif cfg['test'] == 'magnitude':
     logger.info(report)
 
 
-elif cfg['test'] == 'redshift':
+elif cfg['test_method'] == 'redshift':
     raise Exception('Top redshift testing not implemented')
 
 else:
