@@ -1,6 +1,6 @@
 train_data: KiDS.DR4.x.SDSS.DR14
 
-inference_data: KiDS.DR4.merged.cols
+inference_data: KiDS.DR4.cols
 
 model: xgb
 
@@ -14,6 +14,6 @@ cut:
 
 bands: [u, g, r, i, Z, Y, J, H, Ks]
 
-features_key: all
+features_key: colors
 
 test_method: magnitude

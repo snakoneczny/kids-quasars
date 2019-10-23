@@ -9,7 +9,7 @@ from sklearn.preprocessing import LabelEncoder
 from config_parser import get_config
 from env_config import DATA_PATH
 from utils import logger, save_predictions, save_model
-from data import get_mag_str, process_kids
+from data import COLUMNS_KIDS_ALL, COLUMNS_SDSS, get_mag_str, process_kids
 from experiments import kfold_validation, top_k_split, do_experiment
 from plotting import plot_feature_ranking
 from models import get_model
@@ -18,7 +18,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('-c', '--config', dest='config_file', required=True, help='config file name')
 parser.add_argument('-s', '--save', dest='save', action='store_true', help='flag for predictions saving')
 parser.add_argument('-t', '--tag', dest='tag', help='experiment tag, added to logs name')
-parser.add_argument('--test', dest='test', action='store_true', help='indicate test run')
+parser.add_argument('--test', dest='is_test', action='store_true', help='indicate test run')
 args = parser.parse_args()
 
 cfg = get_config(args)
@@ -26,7 +26,7 @@ model = get_model(cfg)
 
 # Read data
 data_path = path.join(DATA_PATH, 'KiDS/DR4/{train_data}.fits'.format(train_data=cfg['train_data']))
-data = process_kids(data_path, bands=cfg['bands'], cut=cfg['cut'], sdss_cleaning=True)
+data = process_kids(data_path, columns=COLUMNS_KIDS_ALL+COLUMNS_SDSS, bands=cfg['bands'], cut=cfg['cut'], sdss_cleaning=True)
 
 # Get X and y
 X = data[cfg['features']].values
@@ -40,7 +40,7 @@ y_encoded = encoder.transform(y)
 
 # Print information about available observations in each class
 classes = np.unique(y)
-logger.info('Available classes: {}'.format(np.unique(y, return_counts=True)))
+logger.info('available classes: {}'.format(np.unique(y, return_counts=True)))
 
 if cfg['test_method'] == 'kfold':
 

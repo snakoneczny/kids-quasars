@@ -1,26 +1,16 @@
 import os
 import random
-from collections import OrderedDict
 
 import pandas as pd
 from astropy.table import Table
 
 from env_config import DATA_PATH
 
-EXTERNAL_QSO_PATHS = [
-    os.path.join(DATA_PATH, 'KiDS/KiDS.DR3.x.2QZ6QZ.cols.csv'),
-    os.path.join(DATA_PATH, 'KiDS/KiDS.DR3.x.QSO.RICHARDS.2009.csv'),
-    os.path.join(DATA_PATH, 'KiDS/KiDS.DR3.x.QSO.RICHARDS.2015.csv'),
-    os.path.join(DATA_PATH, 'KiDS/KiDS.DR3.x.QSO.GALEX.csv'),
-]
-
-EXTERNAL_QSO_DICT = OrderedDict(
-    zip(['x 2QZ/6QZ', 'x Richards 2009', 'x Richards 2015', 'x DiPompeo 2015'], EXTERNAL_QSO_PATHS))
-
 BASE_CLASSES = ['QSO', 'STAR', 'GALAXY']
 
-COLUMNS_KIDS = ['ID', 'RAJ2000', 'DECJ2000', 'Flag', 'MASK', 'CLASS_STAR', 'SG2DPHOT', 'Z_B']
+COLUMNS_KIDS = ['ID', 'RAJ2000', 'DECJ2000', 'Flag', 'IMAFLAGS_ISO', 'MASK', 'CLASS_STAR', 'SG2DPHOT', 'Z_B']
 COLUMNS_SDSS = ['CLASS', 'SUBCLASS', 'Z', 'Z_ERR', 'ZWARNING', 'Z_NOQSO', 'Z_ERR_NOQSO', 'ZWARNING_NOQSO']
+COLUMNS_GAIA = ['parallax', 'parallax_error', 'pmra', 'pmra_error', 'pmdec', 'pmdec_error']
 
 BITMAP_LENGTHS = {
     'Flag': 8,
@@ -87,6 +77,7 @@ def get_all_pairs(bands):
 
 
 BAND_COLUMNS = get_mag_gaap_cols(BANDS)
+BAND_ERR_COLUMNS = get_magerr_gaap_cols(BANDS)
 COLOR_COLUMNS = get_color_cols(get_all_pairs(BANDS))
 COLOR_NEXT_COLUMNS = get_color_cols(get_next_pairs(BANDS))
 RATIO_COLUMNS = get_ratio_cols(get_all_pairs(BANDS))
@@ -105,6 +96,8 @@ PAIRS_REG = [('u', 'r'), ('Z', 'Ks'), ('g', 'i'), ('u', 'g'), ('g', 'Y'), ('g', 
 COLOR_COLUMNS_REG = [get_color_str(x, y) for x, y in PAIRS_REG]
 RATIO_COLUMNS_REG = [get_ratio_str(x, y) for x, y in PAIRS_REG]
 
+COLUMNS_KIDS_ALL = COLUMNS_KIDS + BAND_COLUMNS + COLOR_NEXT_COLUMNS + BAND_ERR_COLUMNS + FLAGS_GAAP_COLUMNS
+
 
 def get_band_features(bands):
     features = get_mag_gaap_cols(bands)
@@ -116,20 +109,45 @@ def get_band_features(bands):
 
 FEATURES = {
     'all': BAND_COLUMNS + COLOR_COLUMNS + RATIO_COLUMNS + ['CLASS_STAR', 'SG2DPHOT_3'],
+    'no-sg': BAND_COLUMNS + COLOR_COLUMNS + RATIO_COLUMNS,
+    'colors': COLOR_COLUMNS + RATIO_COLUMNS,
     'top-clf': BAND_COLUMNS + COLOR_COLUMNS_CLF + RATIO_COLUMNS_CLF + ['CLASS_STAR', 'SG2DPHOT_3'],
     'top-reg': BAND_COLUMNS + COLOR_COLUMNS_REG + RATIO_COLUMNS_REG + ['CLASS_STAR', 'SG2DPHOT_3'],
     'no-u': get_band_features(['g', 'r', 'i', 'Z', 'Y', 'J', 'H', 'Ks']) + ['CLASS_STAR', 'SG2DPHOT_3'],
-    'no-sg': BAND_COLUMNS + COLOR_COLUMNS + RATIO_COLUMNS,
 }
 
+EXTERNAL_QSO = [
+    (
+        'x 2QZ/6QZ',
+        os.path.join(DATA_PATH, 'KiDS/DR4/KiDS.DR4.x.6QZ.fits'),
+        [get_mag_str('r'), 'ID', 'id1'],
+    ),
+    (
+        'x Richards 2009',
+        os.path.join(DATA_PATH, 'KiDS/DR4/KiDS.DR4.x.QSO.Richards.2009.fits'),
+        [get_mag_str('r'), 'ID_1']
+    ),
+    (
+        'x Richards 2015',
+        os.path.join(DATA_PATH, 'KiDS/DR4/KiDS.DR4.x.QSO.Richards.2015.fits'),
+        [get_mag_str('r'), 'ID']
+    ),
+    (
+        'x DiPompeo 2015',
+        os.path.join(DATA_PATH, 'KiDS/DR4/KiDS.DR4.x.QSO.GALEX.fits'),
+        [get_mag_str('r'), 'ID_1', 'PQSO']
+    ),
+]
 
-def process_kids(path, bands=BANDS, kids_cleaning=True, sdss_cleaning=False, cut=None, n=None, with_print=True):
+
+def process_kids(path, columns=None, bands=BANDS, kids_cleaning=True, sdss_cleaning=False, cut=None, n=None,
+                 with_print=True):
     extension = path.split('.')[-1]
     if extension == 'fits':
-        data = read_fits_to_pandas(path, n=n)
+        data = read_fits_to_pandas(path, columns=columns, n=n)
     elif extension == 'csv':
         skiprows = get_skiprows(path, n) if n is not None else None
-        data = pd.read_csv(path, skiprows=skiprows)
+        data = pd.read_csv(path, usecols=columns, skiprows=skiprows)
     else:
         raise (Exception('Not supported file type {} in {}'.format(extension, path)))
 
@@ -141,21 +159,18 @@ def read_fits_to_pandas(filepath, columns=None, n=None):
     table = Table.read(filepath, format='fits')
 
     # Get first n rows if limit specified
-    if n: table = table[0:n]
+    if n:
+        table = table[0:n]
 
-    # Limit table to useful columns and check if SDSS columns are present from cross-matching
-    if columns is None:
-        columns_errors = ['MAGERR_GAAP_{}'.format(band) for band in BANDS]
-        columns = COLUMNS_KIDS + BAND_COLUMNS + COLOR_NEXT_COLUMNS + columns_errors + FLAGS_GAAP_COLUMNS + [
-            'IMAFLAGS_ISO'] + COLUMNS_SDSS
-        columns = [col for col in columns if col in table.columns]
     # Get proper columns into a pandas data frame
-    table = table[columns].to_pandas()
+    if columns:
+        table = table[columns]
+    table = table.to_pandas()
 
-    # Binary string don't work with scikit metrics
-    if 'CLASS' in table:
-        table.loc[:, 'CLASS'] = table['CLASS'].apply(lambda x: x.decode('UTF-8').strip())
-    table.loc[:, 'ID'] = table['ID'].apply(lambda x: x.decode('UTF-8').strip())
+    # Astropy table assumes strings are byte arrays
+    for col in ['ID', 'ID_1', 'CLASS', 'CLASS_PHOTO', 'id1']:
+        if col in table and hasattr(table.loc[0, col], 'decode'):
+            table.loc[:, col] = table[col].apply(lambda x: x.decode('UTF-8').strip())
 
     # Change type to work with it as with a bit map
     if 'IMAFLAGS_ISO' in table:
@@ -359,7 +374,15 @@ def norm_gaia_observations(data):
 
 
 def process_2df(data):
-    data.loc[:, 'id1'] = data['id1'].apply(lambda x: x.strip())
-    data.loc[:, 'id1'] = data['id1'].apply(lambda x: x.upper())
+    data.loc[:, 'id1'] = data['id1'].apply(lambda x: x.strip().upper())
     data = data.replace('GAL', 'GALAXY')
     return data
+
+
+def merge_specialized_catalogs(ctlg_clf, ctlg_z_qso, ctlg_z_galaxy):
+    catalog = ctlg_clf.copy()
+    catalog.loc[catalog['CLASS_PHOTO'] == 'QSO', 'Z_PHOTO'] = ctlg_z_qso.loc[catalog['CLASS_PHOTO'] == 'QSO', 'Z_PHOTO']
+    catalog.loc[catalog['CLASS_PHOTO'] == 'GALAXY', 'Z_PHOTO'] = ctlg_z_galaxy.loc[
+        catalog['CLASS_PHOTO'] == 'GALAXY', 'Z_PHOTO']
+    catalog.loc[catalog['CLASS_PHOTO'] == 'STAR', 'Z_PHOTO'] = 0
+    return catalog

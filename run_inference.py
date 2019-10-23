@@ -29,11 +29,11 @@ data_path_pred = path.join(DATA_PATH, 'KiDS/DR4/{inference_data}.fits'.format(in
 
 # Read train data
 logger.info('Reading train data..')
-data = process_kids(data_path_train, bands=cfg['bands'], cut=cfg['cut'], sdss_cleaning=True)
+train_data = process_kids(data_path_train, bands=cfg['bands'], cut=cfg['cut'], sdss_cleaning=True)
 
-X = data[cfg['features']].values
-y = data['CLASS'].values
-z = data['Z'].values
+X = train_data[cfg['features']].values
+y = train_data['CLASS'].values
+z = train_data['Z'].values
 
 # Encode class values as integers
 encoder = LabelEncoder()
@@ -69,5 +69,6 @@ else:
 
 # Store predictions
 catalog_df = pd.concat([data['ID'], preds], axis=1)
+catalog_df['is_train'] = catalog_df['ID'].isin(train_data['ID'])
 if args.save:
     save_catalog(catalog_df, exp_name=cfg['exp_name'], timestamp=cfg['timestamp_start'])

@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 import joblib
+from astropy.table import Table
 
 from env_config import DATA_PATH
 
@@ -157,10 +158,6 @@ def get_column_desc(column_data):
     return desc
 
 
-def print_column_desc(column_data):
-    print(get_column_desc(column_data))
-
-
 def pretty_print_magnitude(str):
     return str.split('_')[-1] + ' magnitude'
 
@@ -209,9 +206,12 @@ def save_model(model, exp_name, timestamp):
     logger.info('model saved to: {}'.format(model_path))
 
 
+# TODO: Save fits file
 def save_catalog(catalog, exp_name, timestamp):
-    logger.info('Saving catalog..')
-    catalog_path = path.join(DATA_PATH, 'KiDS/DR4/catalogs/{exp_name}__{timestamp}.csv'.format(exp_name=exp_name,
-                                                                                               timestamp=timestamp))
-    catalog.to_csv(catalog_path, index=False)
+    logger.info('saving catalog..')
+    catalog_path = path.join(DATA_PATH, 'KiDS/DR4/catalogs/{exp_name}__{timestamp}.fits'.format(exp_name=exp_name,
+                                                                                                timestamp=timestamp))
+
+    astropy_table = Table.from_pandas(catalog)
+    astropy_table.write(catalog_path)
     logger.info('catalog saved to: {}'.format(catalog_path))

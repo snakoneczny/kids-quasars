@@ -7,9 +7,8 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from utils import pretty_print_feature, \
-    get_external_qso_short_name
-from data import EXTERNAL_QSO_DICT, BASE_CLASSES, BAND_COLUMNS, process_2df
+from utils import pretty_print_feature, get_external_qso_short_name
+from data import EXTERNAL_QSO, BASE_CLASSES, BAND_COLUMNS, process_2df, read_fits_to_pandas, get_mag_str, get_magerr_str
 
 COLOR_QSO = (0.08605633600581403, 0.23824692404212, 0.30561236308077167)
 COLOR_STAR = (0.7587183008012618, 0.7922069335474338, 0.9543861221913403)
@@ -23,6 +22,7 @@ CUSTOM_COLORS = {
     'GALAXY': COLOR_GALAXY,
     'GALAXY_PHOTO': COLOR_GALAXY,
     'not SDSS': (0.8146245329198283, 0.49548316572322215, 0.5752525936416857),
+    'no class': (0.8146245329198283, 0.49548316572322215, 0.5752525936416857),
     'UNKNOWN': (0.6, 0.6, 0.6),
     False: (0.8299576787894204, 0.5632024035248271, 0.7762744444444445),
     True: (0.1700423212105796, 0.43679759647517286, 0.22372555555555548),
@@ -65,6 +65,42 @@ def get_cubehelix_palette(n):
         return palette
 
 
+def make_embedding_plots(data):
+    embedding = data[['tsne_0', 'tsne_1']].values
+
+    # Spectroscopic plots
+    if 'CLASS' in data:
+        plot_embedding(embedding, data['CLASS'], label='SDSS class')
+    if 'Z' in data:
+        plot_embedding(embedding, data['Z'], label='redshift z', is_continuous=True)
+    # And ML from KiDS
+    if 'Z_B' in data:
+        plot_embedding(embedding, data['Z_B'], label='redshift Z_B', is_continuous=True)
+
+    plot_embedding(embedding, data[get_mag_str('r')], label='r magnitude', is_continuous=True)
+
+    # Photometric plots
+    if 'CLASS_PHOTO' in data:
+        plot_embedding(embedding, data['CLASS_PHOTO'], label='photo class')
+    if 'Z_PHOTO' in data:
+        plot_embedding(embedding, data['Z_PHOTO'], label='photo z', is_continuous=True)
+    if 'is_train' in data:
+        plot_embedding(embedding, data['is_train'], label='used in training')
+
+    # Point like classifiers
+    plot_embedding(embedding, data['CLASS_STAR'], label='class star', is_continuous=True)
+    plot_embedding(embedding, data['SG2DPHOT_3'], label='SG2DPHOT 3rd bit', is_continuous=True)
+
+    # Error
+    if get_magerr_str('r') in data:
+        plot_embedding(embedding, data[get_magerr_str('r')], label='r mag. error', is_continuous=True)
+
+    # Flags
+    plot_embedding(embedding, data['IMAFLAGS_ISO_1'], label='IMAFLAGS_ISO 1st bit', is_continuous=True)
+    plot_embedding(embedding, data['MASK_2'], label='MASK 2nd bit', is_continuous=True)
+    plot_embedding(embedding, data['MASK_13'], label='MASK 13th bit', is_continuous=True)
+
+
 def plot_embedding(embedding, labels, label='class', is_continuous=False, alpha=0.5, color_palette='cubehelix',
                    with_custom_colors=True, labels_in_order=False, legend_loc='upper right'):
     if not is_continuous:
@@ -82,16 +118,15 @@ def plot_embedding(embedding, labels, label='class', is_continuous=False, alpha=
         plt.legend(loc=legend_loc)
 
     else:
-        cmap = sns.cubehelix_palette(as_cmap=True)
         f, ax = plt.subplots(figsize=(9, 7))
-        points = ax.scatter(embedding[:, 0], embedding[:, 1], c=labels, s=50, cmap=cmap, alpha=alpha)
+        points = ax.scatter(embedding[:, 0], embedding[:, 1], c=labels, s=50, cmap='gnuplot_r', alpha=alpha)
         cb = f.colorbar(points)
         cb.set_label(label)
 
     plt.show()
 
 
-def plot_confusion_matrix(cm, classes, normalize=False):
+def plot_confusion_matrix(cm, classes, normalize=False, title='SDSS'):
     """
     This function prints and plots the confusion matrix.
     Normalization can be applied by setting `normalize=True`.
@@ -112,10 +147,10 @@ def plot_confusion_matrix(cm, classes, normalize=False):
         str = format(cm[i, j], fmt)
         if normalize:
             str += '%'
-        plt.text(j, i, str, horizontalalignment='center',
-                 color='white' if cm[i, j] > thresh else 'black')
+        plt.text(j, i, str, horizontalalignment='center', color='white' if cm[i, j] > thresh else 'black')
 
     plt.tight_layout()
+    plt.title(title)
     plt.show()
 
 
@@ -152,7 +187,8 @@ def plot_proba_histograms(data):
     color_palette = get_cubehelix_palette(len(columns))
     plt.figure()
     for i, column in enumerate(columns):
-        sns.distplot(data[column], label=get_plot_text(column), kde=False, rug=False, norm_hist=True, color=color_palette[i],
+        sns.distplot(data[column], label=get_plot_text(column), kde=False, rug=False, norm_hist=True,
+                     color=color_palette[i],
                      hist_kws={'alpha': 1.0, 'histtype': 'step', 'linewidth': 1.5, 'linestyle': get_line_style(i)})
     plt.xlabel('probability')
     plt.ylabel('normalized counts per bin')
@@ -257,11 +293,15 @@ def plot_proba_against_size(data, column='QSO', x_lim=(0, 1), step=0.01):
 def plot_external_qso_consistency(catalog):
     step = 0.05
     thresholds = np.arange(0.3, 1.0, step)
-    color_palette = get_cubehelix_palette(len(EXTERNAL_QSO_DICT))
+    color_palette = get_cubehelix_palette(len(EXTERNAL_QSO))
 
     # Read data
     data_dict = OrderedDict(
-        (data_name, pd.read_csv(data_path)) for data_name, data_path in EXTERNAL_QSO_DICT.items())
+        (data_name, read_fits_to_pandas(data_path, columns=columns)) for data_name, data_path, columns in EXTERNAL_QSO)
+
+    # TODO: Ugly work around
+    # Limit galex to minimum QSO proba
+    data_dict['x DiPompeo 2015'] = data_dict['x DiPompeo 2015'].loc[data_dict['x DiPompeo 2015']['PQSO'] > 0.7]
 
     # Take only QSOs for 2QZ/6QZ
     data_tmp = process_2df(data_dict['x 2QZ/6QZ'])
@@ -270,26 +310,27 @@ def plot_external_qso_consistency(catalog):
     plt.figure()
 
     for i, (external_qso_name, external_qso) in enumerate(data_dict.items()):
-        threshold_data_arr = [catalog.loc[catalog[['QSO', 'STAR', 'GALAXY']].max(axis=1) >= thr][['ID', 'CLASS']] for
-                              thr in
-                              thresholds]
-        intersection_data_arr = [thr_data.loc[thr_data['ID'].isin(external_qso['ID'])] for thr_data in
-                                 threshold_data_arr]
-        qso_data_arr = [int_data.loc[int_data['CLASS'] == 'QSO'] for int_data in intersection_data_arr]
+        id_column_ext = 'ID' if 'ID' in external_qso else 'ID_1'
+        catalog_int = catalog.loc[catalog['ID'].isin(external_qso[id_column_ext])]
 
-        agreement_arr = [qso_data_arr[i].shape[0] / float(intersection_data_arr[i].shape[0]) for i, _ in
+        threshold_data_arr = [
+            catalog_int.loc[catalog_int[['QSO_PHOTO', 'STAR_PHOTO', 'GALAXY_PHOTO']].max(axis=1) >= thr][
+                ['ID', 'CLASS_PHOTO']] for thr in thresholds]
+
+        qso_data_arr = [int_data.loc[int_data['CLASS_PHOTO'] == 'QSO'] for int_data in threshold_data_arr]
+
+        agreement_arr = [qso_data_arr[i].shape[0] / float(threshold_data_arr[i].shape[0]) for i, _ in
                          enumerate(qso_data_arr)]
 
         # TODO: Ugly work around
         external_qso_name = get_external_qso_short_name(external_qso_name)
-        # if external_qso_name == 'x 6QZ':
         external_qso_name += ' QSO'
 
         plt.plot(thresholds, agreement_arr, label=external_qso_name, linestyle=get_line_style(i), alpha=1.0,
                  color=color_palette[i])
 
-    plt.xlabel('KiDS minimum probability')
-    plt.ylabel('KiDS QSO contribution')
+    plt.xlabel('KiDS minimum photo probability')
+    plt.ylabel('KiDS photo QSO contribution')
     legend = plt.legend(loc='lower left')
     plt.tight_layout()
 

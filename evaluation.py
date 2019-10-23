@@ -6,7 +6,8 @@ from matplotlib import pyplot as plt
 from sklearn.metrics import accuracy_score, f1_score, confusion_matrix, log_loss, roc_curve, auc, precision_score, \
     recall_score, average_precision_score, precision_recall_curve, mean_squared_error, r2_score
 
-from data import EXTERNAL_QSO_PATHS, BASE_CLASSES, BAND_COLUMNS, get_mag_str, clean_gaia, process_2df
+from data import EXTERNAL_QSO, BASE_CLASSES, BAND_COLUMNS, get_mag_str, clean_gaia, process_2df,\
+    read_fits_to_pandas
 from utils import *
 from plotting import plot_confusion_matrix, plot_roc_curve, plot_precision_recall_curve, get_line_style, \
     get_cubehelix_palette, plot_proba_histograms, plot_proba_against_size, get_plot_text
@@ -22,28 +23,28 @@ def relative_err_std(y_true, y_pred):
     return e.std()
 
 
-def experiment_report(predictions, z_max=None, col_true='CLASS', true_label='SDSS'):
+def experiment_report(predictions, z_max=None, col_true='CLASS'):
     np.set_printoptions(precision=4)
 
     if 'CLASS_PHOTO' in predictions.columns:
-        multiclass_report(predictions, col_true=col_true, true_label=true_label)
+        multiclass_report(predictions, col_true=col_true)
         binary_report(predictions, col_true=col_true)
 
         if 'Z' in predictions.columns:
             completeness_z_report(predictions, col_true=col_true, z_max=z_max)
 
-    if 'Z_PHOTO' in predictions.columns:
+    if 'Z_PHOTO' in predictions.columns and 'Z' in predictions.columns:
         redshift_metrics(predictions)
         redshift_scatter_plots(predictions, z_max)
         # redshift_binned_stats(predictions)
         plot_z_hists(predictions, z_max)
 
-    if 'CLASS_PHOTO' in predictions.columns and 'Z_PHOTO' in predictions.columns:
+    if 'CLASS_PHOTO' in predictions.columns and 'Z_PHOTO' in predictions.columns and 'Z' in predictions.columns:
         precision_z_report(predictions, z_max=z_max)
         classification_and_redshift_report(predictions)
 
 
-def multiclass_report(predictions, col_true='CLASS', true_label='SDSS'):
+def multiclass_report(predictions, col_true='CLASS'):
     class_names = np.unique(predictions[col_true])
 
     print('Multiclass classification results:')
@@ -62,10 +63,11 @@ def multiclass_report(predictions, col_true='CLASS', true_label='SDSS'):
 
     # Confusion matrices
     cnf_matrix = confusion_matrix(y_true, y_pred)
+    title = 'SDSS' if col_true == 'CLASS' else '2QZ/6QZ'
     plt.figure()
-    plot_confusion_matrix(cnf_matrix, classes=class_names)
+    plot_confusion_matrix(cnf_matrix, classes=class_names, title=title)
     plt.figure()
-    plot_confusion_matrix(cnf_matrix, classes=class_names, normalize=True)
+    plot_confusion_matrix(cnf_matrix, classes=class_names, normalize=True, title=title)
     plt.show()
 
     plot_proba_histograms(predictions)
@@ -391,12 +393,12 @@ def number_counts_multidata(data_dict, x_lim, band='r', legend_loc='upper left')
         for i in range(len(bins) - 1):
             data_bin = data.loc[data['bin'] == i]
             counts = counts.append({'objects': data_bin.shape[0], band_column: bin_titles[i], 'dataset': data_name},
-                                   ignore_index=True)
+                                    ignore_index=True)
 
-    sns.catplot(x=band, y='objects', hue='dataset', data=counts, kind='bar',
+    sns.catplot(x=band_column, y='objects', hue='dataset', data=counts, kind='bar',
                 aspect=1.6, height=5, legend_out=False, palette='cubehelix')
     plt.legend(loc=legend_loc)
-    plt.xlabel(pretty_print_magnitude(band))
+    plt.xlabel(pretty_print_magnitude(band_column))
     plt.xticks(rotation=30)
     plt.ylabel('counts per bin')
     plt.yscale('log')
@@ -469,25 +471,28 @@ def number_counts_pixels(data, nside=58, x_lim=None, title=None, legend_loc='upp
 
 def test_external_qso(catalog, save=False, plot=True):
     print('catalog size: {}'.format(catalog.shape[0]))
-    print(describe_column(catalog['CLASS']))
 
-    for external_path in EXTERNAL_QSO_PATHS:
-        external_catalog = pd.read_csv(external_path)
+    for name, file_path, columns in EXTERNAL_QSO:
+        external_catalog = read_fits_to_pandas(file_path, columns=columns)
+
+        # Limit minimum proba for Galex QSOs
+        if name == 'x DiPompeo 2015':
+            external_catalog = external_catalog.loc[external_catalog['PQSO'] > 0.7]
 
         # Take only QSOs for 2QZ/6QZ
         if 'id1' in external_catalog.columns:
             external_catalog = process_2df(external_catalog)
             external_catalog = external_catalog.loc[external_catalog['id1'] == 'QSO']
 
-        title = os.path.basename(external_path)[:-4]
+        title = os.path.basename(file_path)[:-4]
         test_against_external_catalog(external_catalog, catalog, title=title, plot=plot, save=save)
 
 
-def test_gaia(catalog, catalog_x_gaia_path, class_column='CLASS', id_column='ID', save=False):
+def test_gaia(catalog, catalog_x_gaia_path, class_column='CLASS_PHOTO', id_column='ID', save=False):
     print('catalog size: {}'.format(catalog.shape[0]))
-    print(describe_column(catalog[class_column]))
+    print(get_column_desc(catalog[class_column]))
 
-    catalog_x_gaia = pd.read_csv(catalog_x_gaia_path)
+    catalog_x_gaia = read_fits_to_pandas(catalog_x_gaia_path)
 
     movement_mask = ~catalog_x_gaia[['parallax', 'pmdec', 'pmra']].isnull().any(axis=1)
     catalog_x_gaia_movement = catalog_x_gaia.loc[movement_mask]
@@ -498,23 +503,26 @@ def test_gaia(catalog, catalog_x_gaia_path, class_column='CLASS', id_column='ID'
                                   title='GAIA', save=save)
 
 
-def test_against_external_catalog(ext_catalog, catalog, columns=BAND_COLUMNS, class_column='CLASS', id_column='ID',
-                                  title='', plot=True, save=False):
-    is_in_ext = catalog[id_column].isin(ext_catalog[id_column])
+def test_against_external_catalog(ext_catalog, catalog, columns=BAND_COLUMNS, class_column='CLASS_PHOTO',
+                                  id_column='ID', title='', plot=True, save=False):
+    # ID_1 is due to cross matching catalogs with common ID column
+    id_column_ext = id_column if id_column in ext_catalog else 'ID_1'
+
+    is_in_ext = catalog[id_column].isin(ext_catalog[id_column_ext])
     catalogs_cross = catalog.loc[is_in_ext]
-    n_train_in_ext = sum(catalogs_cross['train']) if 'train' in catalogs_cross.columns else 0
+    n_train_in_ext = sum(catalogs_cross['is_train']) if 'is_train' in catalogs_cross.columns else 0
 
     print('--------------------')
     print(title)
-    print('ext. catalog x base set size: {}'.format(ext_catalog.shape[0]))
-    print('ext. catalog x base catalog size: {}, train elements: {}'.format(sum(is_in_ext), n_train_in_ext))
+    print('ext. catalog x KiDS size: {}'.format(ext_catalog.shape[0]))
+    print('ext. catalog x KiDS catalog size: {}, train elements: {}'.format(sum(is_in_ext), n_train_in_ext))
     print('catalogs cross:')
-    print(describe_column(catalogs_cross[class_column]))
+    print(get_column_desc(catalogs_cross[class_column]))
 
-    if 'train' in catalogs_cross.columns:
-        catalogs_cross_no_train = catalogs_cross.loc[catalogs_cross['train'] == 0]
+    if 'is_train' in catalogs_cross.columns:
+        catalogs_cross_no_train = catalogs_cross.loc[catalogs_cross['is_train'] == 0]
         print('catalogs cross, no train:')
-        print(describe_column(catalogs_cross_no_train[class_column]))
+        print(get_column_desc(catalogs_cross_no_train[class_column]))
 
     # Plot class histograms
     if plot:
@@ -522,7 +530,7 @@ def test_against_external_catalog(ext_catalog, catalog, columns=BAND_COLUMNS, cl
             for c in columns:
                 plt.figure()
                 for t in BASE_CLASSES:
-                    sns.distplot(catalogs_cross.loc[catalogs_cross['CLASS'] == t][c], label=t, kde=False, rug=False,
+                    sns.distplot(catalogs_cross.loc[catalogs_cross['CLASS_PHOTO'] == t][c], label=t, kde=False, rug=False,
                                  hist_kws={'alpha': 0.5, 'histtype': 'step'})
                     plt.title(title)
                 plt.legend()
@@ -531,7 +539,7 @@ def test_against_external_catalog(ext_catalog, catalog, columns=BAND_COLUMNS, cl
         catalog.loc[is_in_ext].to_csv('catalogs_intersection/{}.csv'.format(title))
 
 
-def gaia_motion_analysis(data, norm=False):
+def gaia_motion_analysis(data, norm=False, class_col='CLASS_PHOTO'):
     movement_mask = ~data[['parallax', 'pmdec', 'pmra']].isnull().any(axis=1)
     data_movement = data.loc[movement_mask]
 
@@ -543,7 +551,7 @@ def gaia_motion_analysis(data, norm=False):
         result_df = pd.DataFrame(index=['mean', 'median', 'sigma'], columns=motions)
 
         for motion in motions:
-            data_of_interest = data_movement.loc[data_movement['CLASS'] == class_name, motion]
+            data_of_interest = data_movement.loc[data_movement[class_col] == class_name, motion]
             (mu, sigma) = stats.norm.fit(data_of_interest)
             median = np.median(data_of_interest)
 
@@ -565,12 +573,12 @@ def proba_motion_analysis(data_x_gaia, motions=['parallax'], x_lim=(0.3, 1), ste
     mu_dict, sigma_dict, median_dict = defaultdict(list), defaultdict(list), defaultdict(list)
 
     # Get QSOs
-    qso_x_gaia = data_x_gaia.loc[data_x_gaia['CLASS'] == 'QSO']
+    qso_x_gaia = data_x_gaia.loc[data_x_gaia['CLASS_PHOTO'] == 'QSO']
 
     # Limit QSOs to proba thresholds
     thresholds = np.arange(x_lim[0], x_lim[1] + step, step)
     for thr in thresholds:
-        qso_x_gaia_limited = qso_x_gaia.loc[qso_x_gaia['QSO'] >= thr]
+        qso_x_gaia_limited = qso_x_gaia.loc[qso_x_gaia['QSO_PHOTO'] >= thr]
 
         for motion in motions:
             # Get stats

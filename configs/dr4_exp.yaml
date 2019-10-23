@@ -1,6 +1,6 @@
 train_data: KiDS.DR4.x.SDSS.DR14
 
-inference_data: KiDS.DR4.merged.cols
+inference_data: KiDS.DR4.cols
 
 model: xgb
 
