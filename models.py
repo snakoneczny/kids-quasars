@@ -28,7 +28,12 @@ def build_xgb_clf(params):
     if params['is_test']:
         n_estimators = 10
     elif params['is_inference']:
-        n_estimators = 380
+        if params['features_key'] == 'colors':
+            n_estimators = 100
+        elif params['features_key'] == 'no-sg':
+            n_estimators = 260
+        else:  # All features
+            n_estimators = 380
     else:
         n_estimators = 100000
 
@@ -220,7 +225,8 @@ class AstroNet(BaseEstimator):
         if params['tag']:
             log_name = '{}, {}'.format(params['tag'], log_name)
 
-        tensorboard = CustomTensorBoard(log_folder=log_name, params=self.params_exp)
+        tensorboard = CustomTensorBoard(log_folder=log_name, params=self.params_exp,
+                                        is_inference=self.params_exp['is_inference'])
         early_stopping = EarlyStopping(monitor='val_redshift_loss', patience=self.patience, restore_best_weights=True)
         self.callbacks = [tensorboard, early_stopping]
 

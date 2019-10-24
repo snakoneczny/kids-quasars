@@ -82,6 +82,7 @@ def make_embedding_plots(data):
     # Photometric plots
     if 'CLASS_PHOTO' in data:
         plot_embedding(embedding, data['CLASS_PHOTO'], label='photo class')
+        plot_embedding(embedding, data['QSO_PHOTO'], label='QSO proba', is_continuous=True)
     if 'Z_PHOTO' in data:
         plot_embedding(embedding, data['Z_PHOTO'], label='photo z', is_continuous=True)
     if 'is_train' in data:
@@ -92,8 +93,7 @@ def make_embedding_plots(data):
     plot_embedding(embedding, data['SG2DPHOT_3'], label='SG2DPHOT 3rd bit', is_continuous=True)
 
     # Error
-    if get_magerr_str('r') in data:
-        plot_embedding(embedding, data[get_magerr_str('r')], label='r mag. error', is_continuous=True)
+    plot_embedding(embedding, data[get_magerr_str('r')], label='r mag. error', is_continuous=True)
 
     # Flags
     plot_embedding(embedding, data['IMAFLAGS_ISO_1'], label='IMAFLAGS_ISO 1st bit', is_continuous=True)
