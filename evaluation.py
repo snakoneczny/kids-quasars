@@ -23,8 +23,11 @@ def relative_err_std(y_true, y_pred):
     return e.std()
 
 
-def experiment_report(predictions, z_max=None, col_true='CLASS'):
+def experiment_report(predictions, test_subset=None, z_max=None, col_true='CLASS'):
     np.set_printoptions(precision=4)
+
+    if test_subset:
+        predictions = predictions.loc[predictions['test_subset'] == test_subset]
 
     if 'CLASS_PHOTO' in predictions.columns:
         multiclass_report(predictions, col_true=col_true)

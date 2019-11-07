@@ -4,7 +4,7 @@ from collections import OrderedDict
 
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import KFold
+from sklearn.model_selection import KFold, train_test_split
 from sklearn.metrics import accuracy_score, f1_score, mean_squared_error, mean_absolute_error
 
 from utils import logger, safe_indexing
@@ -25,29 +25,28 @@ metrics_redshift = OrderedDict([
 ])
 
 
-def do_experiment(data, model, cfg, encoder, X_train, X_test, y_train, y_test, z_train, z_test, idx_test):
+def do_experiment(data, model, cfg, encoder, X_train, X_test_arr, y_train, y_test_arr, z_train, z_test_arr,
+                  idx_test_arr, test_names_arr):
+    # Get the data frame with all objects used as test
+    idx_test = np.concatenate(idx_test_arr)
     predictions_df = data.loc[idx_test, ['ID', 'CLASS', 'Z']].reset_index(drop=True)
 
-    # TODO: extract function
-    # Limit train sample and test sample on which scores are calculated to the specialized subset
-    test_scores_params = {'X_test': X_test, 'y_test': y_test, 'z_test': z_test}
+    # Limit train sample and test samples on which scores are calculated to the specialized subset
+    X_train_nospec, X_test_arr_nospec, y_train_nospec, y_test_arr_nospec, z_train_nospec, z_test_arr_nospec = \
+        X_train, X_test_arr, y_train, y_test_arr, z_train, z_test_arr
     if cfg['specialization']:
-        mask = (y_train == encoder.transform([cfg['specialization']])[0])
-        X_train, y_train, z_train = X_train[mask], y_train[mask], z_train[mask]
-
-        mask = (y_test == encoder.transform([cfg['specialization']])[0])
-        test_scores_params = {'X_test': X_test[mask], 'y_test': y_test[mask], 'z_test': z_test[mask]}
+        X_train, X_test_arr, y_train, y_test_arr, z_train, z_test_arr = \
+            limit_to_spec(cfg, encoder, X_train, X_test_arr, y_train, y_test_arr, z_train, z_test_arr)
 
     # Create all the train parameters
+    # TODO: refactor, build_validation_data function
     true_outputs = build_outputs(y_train, z_train, cfg)
     train_params = {}
     if cfg['model'] == 'ann':
-        # TODO: refactor
-        train_params['validation_data'] = build_ann_validation_data(
-            test_scores_params['X_test'], test_scores_params['y_test'], test_scores_params['z_test'], cfg)
+        train_params['validation_data_arr'] = build_ann_validation_data(X_test_arr, y_test_arr, z_test_arr,
+                                                                        test_names_arr, cfg)
     elif cfg['model'] == 'xgb':
-        train_params['eval_set'] = build_xgb_validation_data(
-            test_scores_params['X_test'], test_scores_params['y_test'], test_scores_params['z_test'], cfg)
+        train_params['eval_set'] = build_xgb_validation_data(X_test_arr, y_test_arr, z_test_arr, cfg)
         train_params['early_stopping_rounds'] = 200  # TODO: extract some train parameters
 
     # Train the model
@@ -55,23 +54,40 @@ def do_experiment(data, model, cfg, encoder, X_train, X_test, y_train, y_test, z
 
     # Predict on the validation data
     if cfg['model'] == 'ann':
-        preds_val = model.predict(X_test, encoder)
+        preds_val_arr = [model.predict(X_test_nospec, encoder) for X_test_nospec in X_test_arr_nospec]
     else:
-        preds_val = get_single_problem_predictions(model, X_test, encoder, cfg)
+        preds_val_arr = [get_single_problem_predictions(model, X_test_nospec, encoder, cfg) for X_test_nospec in
+                         X_test_arr_nospec]
 
-    # Store prediction in original data order
+    # Fill test name, concat rows wise, concat with original data
+    for i, test_name in enumerate(test_names_arr):
+        preds_val_arr[i]['test_subset'] = test_name
+    preds_val = pd.concat(preds_val_arr, axis=0).reset_index(drop=True)
     predictions_df = pd.concat([predictions_df, preds_val], axis=1)
-    predictions_df['exp_subset'] = 'test'
 
     # Get and store scores
     if cfg['specialization']:
         # Limit validation predictions to specialized subset when calculating scores
-        mask = (y_test == encoder.transform([cfg['specialization']])[0])
-        preds_val = preds_val[mask]
+        mask = (y_test_arr_nospec[0] == encoder.transform([cfg['specialization']])[0])
+        preds_val_arr[0] = preds_val_arr[0][mask]
 
-    scores, report = get_scores(test_scores_params['y_test'], test_scores_params['z_test'], preds_val, encoder, cfg)
+    scores, report = get_scores(y_test_arr[0], z_test_arr[0], preds_val_arr[0], encoder, cfg)
 
     return predictions_df, scores, report
+
+
+def limit_to_spec(cfg, encoder, X_train, X_test_arr, y_train, y_test_arr, z_train, z_test_arr):
+    # Limit train data
+    spec_encoded = encoder.transform([cfg['specialization']])[0]
+    mask = (y_train == spec_encoded)
+    X_train, y_train, z_train = X_train[mask], y_train[mask], z_train[mask]
+
+    # Limit test data in arrays
+    for i in range(len(X_test_arr)):
+        mask = (y_test_arr[i] == spec_encoded)
+        X_test_arr[i], y_test_arr[i], z_test_arr[i] = X_test_arr[i][mask], y_test_arr[i][mask], z_test_arr[i][mask]
+
+    return X_train, X_test_arr, y_train, y_test_arr, z_train, z_test_arr
 
 
 def kfold_validation(data, model, cfg, encoder, X_train_val, y_train_val, z_train_val, idx_train_val):
@@ -95,7 +111,7 @@ def kfold_validation(data, model, cfg, encoder, X_train_val, y_train_val, z_trai
 
         # Store prediction in original data order
         predictions_df.loc[val] = preds_val
-        predictions_df.loc[val, 'subset'] = 'fold {}'.format(fold)
+        predictions_df.loc[val, 'test'] = 'fold {}'.format(fold)
 
     # Report kfold validation scores
     report = get_kfold_report(scores)
@@ -142,7 +158,7 @@ def get_scores(y_val, z_val, preds_val, encoder, cfg):
     return scores, '\n'.join(report_lines)
 
 
-def top_k_split(*arrays, test_size=0.2):
+def train_test_top_split(*arrays, test_size=0.2):
     """
     :param arrays: arrays of any format, the first one should be array or Series
         All arrays are divided based on the values in the first one
@@ -163,6 +179,34 @@ def top_k_split(*arrays, test_size=0.2):
     ind_low = ind_part[:-1 * k]
 
     return list(chain.from_iterable((safe_indexing(a, ind_low), safe_indexing(a, ind_top)) for a in arrays))
+
+
+def train_test_top_random_split(*arrays, top_test_size=0.1, random_test_size=0.1):
+    """
+    :param arrays: arrays of any format, the first one should be array or Series
+        All arrays are divided based on the values in the first one
+    :param top_test_size: float (0, 1)
+    :param random_test_size: float (0, 1)
+    :return: list
+    """
+    n_arrays = len(arrays)
+    if n_arrays == 0:
+        raise ValueError('At least one array required as input')
+
+    # Make indexable
+    arrays = [a for a in arrays]
+
+    # Get top index
+    k = int(top_test_size * arrays[0].shape[0])
+    split_ind = arrays[0].shape[0] - k
+    ind_part = np.argpartition(arrays[0], split_ind)
+    ind_test_top = ind_part[split_ind:]
+    ind_low = ind_part[:split_ind]
+
+    ind_train, ind_test_random = train_test_split(ind_low, test_size=random_test_size, random_state=8725)
+
+    return list(chain.from_iterable((safe_indexing(a, ind_train), safe_indexing(a, ind_test_top),
+                                     safe_indexing(a, ind_test_random)) for a in arrays))
 
 
 def value_split(*arrays, value):

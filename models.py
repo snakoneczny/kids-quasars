@@ -9,7 +9,7 @@ from keras.optimizers import Adam
 from sklearn.preprocessing import MinMaxScaler
 from keras import backend as K
 from keras.utils import np_utils
-from keras.callbacks import TensorBoard, EarlyStopping
+from keras.callbacks import Callback, TensorBoard, EarlyStopping
 
 
 def build_rf_clf(params):
@@ -101,7 +101,7 @@ class AnnClf(BaseEstimator):
         self.callbacks = []
         if not self.params_exp['is_inference']:
             self.callbacks.append(EarlyStopping(monitor='val_loss', patience=self.patience, restore_best_weights=True))
-        if not self.params_exp['test']:
+        if not self.params_exp['is_test']:
             self.callbacks.append(CustomTensorBoard(log_folder=log_name, params=self.params_exp,
                                                     is_inference=self.params_exp['is_inference']))
 
@@ -124,12 +124,24 @@ class AnnClf(BaseEstimator):
 
         return model
 
-    def fit(self, X, y, validation_data=None):
+    def fit(self, X, y, validation_data_arr=None):
+        # TODO: extract a function
         X = self.scaler.fit_transform(X)
         y['category'] = np_utils.to_categorical(y['category'])
-        if validation_data:
-            validation_data = (self.scaler.transform(validation_data[0]),
-                               {'category': np_utils.to_categorical(validation_data[1]['category'])})
+
+        if validation_data_arr:
+            validation_data_arr = [(self.scaler.transform(validation_data_arr[i][0]),
+                                    {'category': np_utils.to_categorical(validation_data_arr[i][1]['category'])},
+                                    validation_data_arr[i][2]) for i in range(len(validation_data_arr))]
+
+            validation_callback = AdditionalValidationSets(validation_data_arr[1:])
+            self.callbacks = [validation_callback] + self.callbacks
+
+            validation_data = (validation_data_arr[0][0], validation_data_arr[0][1])
+
+        else:
+            validation_data = None
+
         self.network = self.__create_network(self.params_exp)
         self.network.fit(X, y, validation_data=validation_data, epochs=self.epochs, batch_size=self.batch_size,
                          callbacks=self.callbacks, verbose=1)
@@ -147,7 +159,7 @@ class AnnReg(BaseEstimator):
         self.params_exp = params
         self.network = None
         self.scaler = MinMaxScaler()
-        self.patience = 400
+        self.patience = 800
         self.batch_size = 256
         self.lr = 0.0001
 
@@ -194,11 +206,23 @@ class AnnReg(BaseEstimator):
 
         return model
 
-    def fit(self, X, y, validation_data=None):
+    def fit(self, X, y, validation_data_arr=None):
+        # TODO: extract a function, differs from clf network only with respect to y
         X = self.scaler.fit_transform(X)
-        if validation_data:
-            validation_data = (self.scaler.transform(validation_data[0]),
-                               {'redshift': validation_data[1]['redshift']})
+
+        if validation_data_arr:
+            validation_data_arr = [(self.scaler.transform(validation_data_arr[i][0]),
+                                    {'redshift': validation_data_arr[i][1]['redshift']},
+                                    validation_data_arr[i][2]) for i in range(len(validation_data_arr))]
+
+            validation_callback = AdditionalValidationSets(validation_data_arr[1:])
+            self.callbacks = [validation_callback] + self.callbacks
+
+            validation_data = (validation_data_arr[0][0], validation_data_arr[0][1])
+
+        else:
+            validation_data = None
+
         self.network = self.__create_network(self.params_exp)
         self.network.fit(X, y, validation_data=validation_data, epochs=self.epochs, batch_size=self.batch_size,
                          callbacks=self.callbacks, verbose=1)
@@ -217,7 +241,7 @@ class AstroNet(BaseEstimator):
         self.network = None
         self.scaler = MinMaxScaler()
         self.epochs = 4000
-        self.patience = 400
+        self.patience = 800
         self.batch_size = 256
         self.lr = 0.0001
 
@@ -282,20 +306,78 @@ class AstroNet(BaseEstimator):
         return predictions_df
 
 
+class AdditionalValidationSets(Callback):
+    def __init__(self, validation_sets, verbose=0, batch_size=None):
+        """
+        :param validation_sets:
+        a list of 3-tuples (validation_data, validation_targets, validation_set_name)
+        or 4-tuples (validation_data, validation_targets, sample_weights, validation_set_name)
+        :param verbose:
+        verbosity mode, 1 or 0
+        :param batch_size:
+        batch size to be used when evaluating on the additional datasets
+        """
+        super(AdditionalValidationSets, self).__init__()
+        self.validation_sets = validation_sets
+        for validation_set in self.validation_sets:
+            if len(validation_set) not in [2, 3]:
+                raise ValueError()
+        self.epoch = []
+        self.history = {}
+        self.verbose = verbose
+        self.batch_size = batch_size
+
+    def on_train_begin(self, logs=None):
+        self.epoch = []
+        self.history = {}
+
+    def on_epoch_end(self, epoch, logs=None):
+        # logs = logs or {}
+        self.epoch.append(epoch)
+
+        # Record the same values as History() as well
+        for k, v in logs.items():
+            self.history.setdefault(k, []).append(v)
+
+        # Evaluate on the additional validation sets
+        for validation_set in self.validation_sets:
+            if len(validation_set) == 3:
+                validation_data, validation_targets, validation_set_name = validation_set
+                sample_weights = None
+            elif len(validation_set) == 4:
+                validation_data, validation_targets, sample_weights, validation_set_name = validation_set
+            else:
+                raise ValueError()
+
+            results = self.model.evaluate(x=validation_data, y=validation_targets, verbose=self.verbose,
+                                          sample_weight=sample_weights, batch_size=self.batch_size)
+
+            for i, result in enumerate(results):
+                if i == 0:
+                    value_name = validation_set_name + '_loss'
+                else:
+                    value_name = validation_set_name + '_' + self.model.metrics[i - 1]
+                self.history.setdefault(value_name, []).append(result)
+                logs[value_name] = result
+
+
 class CustomTensorBoard(TensorBoard):
     def __init__(self, log_folder, params, is_inference):
-        self.params_exp = params
         subfolder = 'inf' if is_inference else 'exp'
         log_dir = './outputs/tensorboard/{}/{}'.format(subfolder, log_folder)
         super().__init__(log_dir=log_dir)
 
+        self.params_exp = params
+        self.main_test_name = 'top' if params['test_method'] == 'magnitude' else 'random'
+
     def on_epoch_end(self, epoch, logs=None):
         logs_to_send = logs.copy()
+
         # Add learning rate
         logs_to_send.update({'learning rate': K.eval(self.model.optimizer.lr)})
 
-        # Remove artificial logs
-        to_pop = ['loss']
+        # Remove losses tracked for gradient descent
+        to_pop = ['loss', 'random_loss']
         if self.params_exp['pred_class'] and self.params_exp['pred_z']:
             to_pop += [
                 # Losses are not needed as we track all metrics with their proper names
@@ -310,7 +392,7 @@ class CustomTensorBoard(TensorBoard):
             ]
         for str in to_pop:
             logs_to_send.pop(str, None)
-            logs_to_send.pop('val_{}'.format(str), None)
+            logs_to_send.pop('{}_{}'.format(self.main_test_name, str), None)
 
         # Standalone problems, add category or redshift to metric names
         if not (self.params_exp['pred_class'] and self.params_exp['pred_z']):
@@ -319,7 +401,8 @@ class CustomTensorBoard(TensorBoard):
                 else ['mean_squared_error', 'mean_absolute_error']
             for metric in metrics:
                 logs_to_send['{}_{}'.format(t, metric)] = logs_to_send.pop('{}'.format(metric))
-                logs_to_send['val_{}_{}'.format(t, metric)] = logs_to_send.pop('val_{}'.format(metric))
+                logs_to_send['{}_{}_{}'.format(t, self.main_test_name, metric)] = logs_to_send.pop(
+                    'val_{}'.format(metric))
 
         super().on_epoch_end(epoch, logs_to_send)
 
@@ -368,8 +451,10 @@ def get_model(cfg):
     }
 
     name = cfg['model']
-    if cfg['pred_class']: name += '-class'
-    if cfg['pred_z']: name += '-redshift'
+    if cfg['pred_class']:
+        name += '-class'
+    if cfg['pred_z']:
+        name += '-redshift'
 
     model = constructors[name](cfg)
     return model
@@ -395,15 +480,17 @@ def build_outputs(y, z, cfg):
     return outputs
 
 
-def build_ann_validation_data(X_val, y_val, z_val, cfg):
-    validation_outputs = build_ann_output_dict(y_val, z_val, cfg)
-    validation_data = (X_val, validation_outputs)
+def build_ann_validation_data(X_val_arr, y_val_arr, z_val_arr, test_names_arr, cfg):
+    validation_data = [(X_val_arr[i], build_ann_output_dict(y_val_arr[i], z_val_arr[i], cfg), test_names_arr[i]) for i
+                       in range(len(X_val_arr))]
     return validation_data
 
 
-def build_xgb_validation_data(X_val, y_val, z_val, cfg):
+def build_xgb_validation_data(X_val_arr, y_val_arr, z_val_arr, cfg):
     if cfg['pred_class']:
-        val_list = [(X_val, y_val)]
+        val_list = [(X_val_arr[i], y_val_arr[i]) for i in range(len(X_val_arr))]
     else:
-        val_list = [(X_val, z_val)]
+        val_list = [(X_val_arr[i], z_val_arr[i]) for i in range(len(X_val_arr))]
+    # Reverse is needed as early stopping uses the last eval set
+    val_list.reverse()
     return val_list
