@@ -1,15 +1,15 @@
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
-from xgboost import XGBClassifier, XGBRegressor
-from sklearn.base import BaseEstimator
-from keras.models import Sequential, Model
-from keras.layers import Input, Dense
-from keras.optimizers import Adam
 from sklearn.preprocessing import MinMaxScaler
-from keras import backend as K
-from keras.utils import np_utils
-from keras.callbacks import Callback, TensorBoard, EarlyStopping
+from sklearn.base import BaseEstimator
+from xgboost import XGBClassifier, XGBRegressor
+from tensorflow.keras.models import Sequential, Model
+from tensorflow.keras.layers import Input, Dense
+from tensorflow.keras.optimizers import Adam
+from tensorflow.keras import backend as K
+from tensorflow.keras.callbacks import Callback, TensorBoard, EarlyStopping
+from tensorflow.keras.utils import to_categorical
 
 
 def build_rf_clf(params):
@@ -86,6 +86,7 @@ class AnnClf(BaseEstimator):
         self.patience = 400
         self.batch_size = 256
         self.lr = 0.0001
+        self.metrics = ['categorical_crossentropy', 'accuracy']
 
         if params['is_test']:
             self.epochs = 10
@@ -120,21 +121,21 @@ class AnnClf(BaseEstimator):
         opt = Adam(lr=self.lr)
 
         loss = {'category': 'categorical_crossentropy'}
-        model.compile(loss=loss, optimizer=opt, metrics=['categorical_crossentropy', 'accuracy'])
+        model.compile(loss=loss, optimizer=opt, metrics=self.metrics)
 
         return model
 
     def fit(self, X, y, validation_data_arr=None):
         # TODO: extract a function
         X = self.scaler.fit_transform(X)
-        y['category'] = np_utils.to_categorical(y['category'])
+        y['category'] = to_categorical(y['category'])
 
         if validation_data_arr:
             validation_data_arr = [(self.scaler.transform(validation_data_arr[i][0]),
-                                    {'category': np_utils.to_categorical(validation_data_arr[i][1]['category'])},
+                                    {'category': to_categorical(validation_data_arr[i][1]['category'])},
                                     validation_data_arr[i][2]) for i in range(len(validation_data_arr))]
 
-            validation_callback = AdditionalValidationSets(validation_data_arr[1:])
+            validation_callback = AdditionalValidationSets(validation_data_arr[1:], metrics=self.metrics)
             self.callbacks = [validation_callback] + self.callbacks
 
             validation_data = (validation_data_arr[0][0], validation_data_arr[0][1])
@@ -162,6 +163,7 @@ class AnnReg(BaseEstimator):
         self.patience = 800
         self.batch_size = 256
         self.lr = 0.0001
+        self.metrics = ['mean_absolute_error', 'mean_squared_error']
 
         if params['is_test']:
             self.epochs = 10
@@ -201,8 +203,9 @@ class AnnReg(BaseEstimator):
 
         opt = Adam(lr=self.lr)
 
+        # negloglik = lambda y, p_y: -p_y.log_prob(y)
         loss = {'redshift': 'mean_squared_error'}
-        model.compile(loss=loss, optimizer=opt, metrics=['mean_absolute_error', 'mean_squared_error'])
+        model.compile(loss=loss, optimizer=opt, metrics=self.metrics)
 
         return model
 
@@ -215,7 +218,7 @@ class AnnReg(BaseEstimator):
                                     {'redshift': validation_data_arr[i][1]['redshift']},
                                     validation_data_arr[i][2]) for i in range(len(validation_data_arr))]
 
-            validation_callback = AdditionalValidationSets(validation_data_arr[1:])
+            validation_callback = AdditionalValidationSets(validation_data_arr[1:], metrics=self.metrics)
             self.callbacks = [validation_callback] + self.callbacks
 
             validation_data = (validation_data_arr[0][0], validation_data_arr[0][1])
@@ -307,7 +310,7 @@ class AstroNet(BaseEstimator):
 
 
 class AdditionalValidationSets(Callback):
-    def __init__(self, validation_sets, verbose=0, batch_size=None):
+    def __init__(self, validation_sets, metrics, verbose=0, batch_size=None):
         """
         :param validation_sets:
         a list of 3-tuples (validation_data, validation_targets, validation_set_name)
@@ -326,6 +329,7 @@ class AdditionalValidationSets(Callback):
         self.history = {}
         self.verbose = verbose
         self.batch_size = batch_size
+        self.metrics = metrics
 
     def on_train_begin(self, logs=None):
         self.epoch = []
@@ -354,9 +358,9 @@ class AdditionalValidationSets(Callback):
 
             for i, result in enumerate(results):
                 if i == 0:
-                    value_name = validation_set_name + '_loss'
+                    value_name = 'val_' + validation_set_name + '_loss'
                 else:
-                    value_name = validation_set_name + '_' + self.model.metrics[i - 1]
+                    value_name = 'val_' + validation_set_name + '_' + self.metrics[i - 1]
                 self.history.setdefault(value_name, []).append(result)
                 logs[value_name] = result
 
@@ -365,7 +369,7 @@ class CustomTensorBoard(TensorBoard):
     def __init__(self, log_folder, params, is_inference):
         subfolder = 'inf' if is_inference else 'exp'
         log_dir = './outputs/tensorboard/{}/{}'.format(subfolder, log_folder)
-        super().__init__(log_dir=log_dir)
+        super().__init__(log_dir=log_dir, profile_batch=0)
 
         self.params_exp = params
         self.main_test_name = 'top' if params['test_method'] == 'magnitude' else 'random'
@@ -377,42 +381,52 @@ class CustomTensorBoard(TensorBoard):
         logs_to_send.update({'learning rate': K.eval(self.model.optimizer.lr)})
 
         # Remove losses tracked for gradient descent
-        to_pop = ['loss', 'random_loss']
-        if self.params_exp['pred_class'] and self.params_exp['pred_z']:
-            to_pop += [
-                # Losses are not needed as we track all metrics with their proper names
-                'category_loss',
-                'redshift_loss',
-                # Below metrics are artificially created due to metrics tracking
-                'redshift_categorical_crossentropy',
-                'redshift_acc',
-                # The same for category
-                'category_mean_squared_error',
-                'category_mean_absolute_error',
-            ]
-        for str in to_pop:
-            logs_to_send.pop(str, None)
-            logs_to_send.pop('{}_{}'.format(self.main_test_name, str), None)
+        # to_pop = []  # ['loss', 'random_loss']
+        # if self.params_exp['pred_class'] and self.params_exp['pred_z']:
+        #     to_pop += [
+        #         # Losses are not needed as we track all metrics with their proper names
+        #         'category_loss',
+        #         'redshift_loss',
+        #         # Below metrics are artificially created due to metrics tracking
+        #         'redshift_categorical_crossentropy',
+        #         'redshift_acc',
+        #         # The same for category
+        #         'category_mean_squared_error',
+        #         'category_mean_absolute_error',
+        #     ]
+        # for str in to_pop:
+        #     logs_to_send.pop(str, None)
+        #     logs_to_send.pop('{}_{}'.format(self.main_test_name, str), None)
 
         # Standalone problems, add category or redshift to metric names
-        if not (self.params_exp['pred_class'] and self.params_exp['pred_z']):
-            t = 'category' if self.params_exp['pred_class'] else 'redshift'
-            metrics = ['categorical_crossentropy', 'acc'] if self.params_exp['pred_class'] \
-                else ['mean_squared_error', 'mean_absolute_error']
-            for metric in metrics:
-                logs_to_send['{}_{}'.format(t, metric)] = logs_to_send.pop('{}'.format(metric))
-                logs_to_send['{}_{}_{}'.format(t, self.main_test_name, metric)] = logs_to_send.pop(
-                    'val_{}'.format(metric))
+        # if not (self.params_exp['pred_class'] and self.params_exp['pred_z']):
+        #     metrics = ['categorical_crossentropy', 'acc'] if self.params_exp['pred_class'] \
+        #         else ['mean_squared_error', 'mean_absolute_error']
+        #     for metric in metrics:
+        #         logs_to_send['train_{}'.format(metric)] = logs_to_send.pop('{}'.format(metric))
+        #         logs_to_send['{}_{}'.format(self.main_test_name, metric)] = logs_to_send.pop(
+        #             'val_{}'.format(metric))
+        # TODO: add to alll metrics exp name: t = 'category' if self.params_exp['pred_class'] else 'redshift'
+
+        # Check if additional random validation sets present and put val_random on the same plot with train
+        if any([log_name.startswith('val_random') for log_name in logs_to_send]):
+            for key in logs_to_send.keys():
+                if key.startswith('val_random'):
+                    key_1 = key.replace('val_random', 'val')
+                    key_2 = key.replace('val_random', 'val_' + self.main_test_name)
+                    logs_to_send[key_2] = logs_to_send[key_1]
+                    logs_to_send[key_1] = logs_to_send[key]
+                    logs_to_send.pop(key)
 
         super().on_epoch_end(epoch, logs_to_send)
 
 
 # TODO: this function transforms y to categorical and scales X, could it be merged with build_validation_data?
 def create_multioutput_data(y, validation_data, scaler):
-    y_categorical = np_utils.to_categorical(y['category'])
+    y_categorical = to_categorical(y['category'])
     y['category'] = y_categorical
 
-    y_val_categorical = np_utils.to_categorical(validation_data[1]['category'])
+    y_val_categorical = to_categorical(validation_data[1]['category'])
     validation_data = (scaler.transform(validation_data[0]),
                        {'category': y_val_categorical, 'redshift': validation_data[1]['redshift']})
 
