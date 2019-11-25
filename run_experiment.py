@@ -10,7 +10,7 @@ from config_parser import get_config
 from env_config import DATA_PATH
 from utils import logger, save_predictions, save_model
 from data import COLUMNS_KIDS_ALL, COLUMNS_SDSS, get_mag_str, process_kids
-from experiments import kfold_validation, train_test_top_random_split, do_experiment
+from experiment import kfold_validation, train_test_top_random_split, do_experiment
 from plotting import plot_feature_ranking
 from models import get_model
 

@@ -80,14 +80,16 @@ def limit_to_spec(cfg, encoder, X_train, X_test_arr, y_train, y_test_arr, z_trai
     # Limit train data
     spec_encoded = encoder.transform([cfg['specialization']])[0]
     mask = (y_train == spec_encoded)
-    X_train, y_train, z_train = X_train[mask], y_train[mask], z_train[mask]
+    X_train_spec, y_train_spec, z_train_spec = X_train[mask], y_train[mask], z_train[mask]
 
     # Limit test data in arrays
+    X_test_arr_spec, y_test_arr_spec, z_test_arr_spec = X_test_arr.copy(), y_test_arr.copy(), z_test_arr.copy()
     for i in range(len(X_test_arr)):
         mask = (y_test_arr[i] == spec_encoded)
-        X_test_arr[i], y_test_arr[i], z_test_arr[i] = X_test_arr[i][mask], y_test_arr[i][mask], z_test_arr[i][mask]
+        X_test_arr_spec[i], y_test_arr_spec[i], z_test_arr_spec[i] = \
+            X_test_arr[i][mask], y_test_arr[i][mask], z_test_arr[i][mask]
 
-    return X_train, X_test_arr, y_train, y_test_arr, z_train, z_test_arr
+    return X_train_spec, X_test_arr_spec, y_train_spec, y_test_arr_spec, z_train_spec, z_test_arr_spec
 
 
 def kfold_validation(data, model, cfg, encoder, X_train_val, y_train_val, z_train_val, idx_train_val):

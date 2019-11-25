@@ -185,17 +185,19 @@ def plot_z_true_vs_pred(predictions, z_col, z_max):
 
         # TODO: refactor
         plt.figure()
-        p = sns.scatterplot(x='Z', y=z_col, data=preds_c)
+        ax = sns.scatterplot(x='Z', y=z_col, data=preds_c, size='Z_PHOTO_STDDEV', hue='Z_PHOTO_STDDEV',
+                             sizes=(60, 20), palette='rainbow_r', alpha=0.7)
         plt.plot(range(z_max[c] + 1))
-        p.set(xlim=(0, z_max[c]), ylim=(0, z_max[c]))
+        ax.set(xlim=(0, z_max[c]), ylim=(0, z_max[c]))
         plt.xlabel(get_plot_text('Z'))
         plt.ylabel(get_plot_text(z_col))
         plt.title(get_plot_text(c))
+        plt.show()
 
         plt.figure()
-        p = sns.kdeplot(preds_c['Z'], preds_c[z_col], shade=True)
+        ax = sns.kdeplot(preds_c['Z'], preds_c[z_col], shade=True)
         plt.plot(range(z_max[c] + 1))
-        p.set(xlim=(0, z_max[c]), ylim=(0, z_max[c]))
+        ax.set(xlim=(0, z_max[c]), ylim=(0, z_max[c]))
         plt.xlabel(get_plot_text('Z'))
         plt.ylabel(get_plot_text(z_col))
         plt.title(get_plot_text(c))

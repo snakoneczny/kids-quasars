@@ -1,15 +1,22 @@
+from collections.abc import Iterable
+
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.base import BaseEstimator
+from sklearn.metrics import mean_squared_error, mean_absolute_error
 from xgboost import XGBClassifier, XGBRegressor
+import tensorflow as tf
+import tensorflow_probability as tfp
 from tensorflow.keras.models import Sequential, Model
 from tensorflow.keras.layers import Input, Dense
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras import backend as K
 from tensorflow.keras.callbacks import Callback, TensorBoard, EarlyStopping
 from tensorflow.keras.utils import to_categorical
+
+tfd = tfp.distributions
 
 
 def build_rf_clf(params):
@@ -86,7 +93,7 @@ class AnnClf(BaseEstimator):
         self.patience = 400
         self.batch_size = 256
         self.lr = 0.0001
-        self.metrics = ['categorical_crossentropy', 'accuracy']
+        self.metric_names = ['categorical_crossentropy', 'accuracy']
 
         if params['is_test']:
             self.epochs = 10
@@ -121,7 +128,7 @@ class AnnClf(BaseEstimator):
         opt = Adam(lr=self.lr)
 
         loss = {'category': 'categorical_crossentropy'}
-        model.compile(loss=loss, optimizer=opt, metrics=self.metrics)
+        model.compile(loss=loss, optimizer=opt, metrics=self.metric_names)
 
         return model
 
@@ -135,7 +142,8 @@ class AnnClf(BaseEstimator):
                                     {'category': to_categorical(validation_data_arr[i][1]['category'])},
                                     validation_data_arr[i][2]) for i in range(len(validation_data_arr))]
 
-            validation_callback = AdditionalValidationSets(validation_data_arr[1:], metrics=self.metrics)
+            validation_callback = AdditionalValidationSets(validation_data_arr[1:],
+                                                           tracked_metric_names=self.metric_names)
             self.callbacks = [validation_callback] + self.callbacks
 
             validation_data = (validation_data_arr[0][0], validation_data_arr[0][1])
@@ -160,10 +168,13 @@ class AnnReg(BaseEstimator):
         self.params_exp = params
         self.network = None
         self.scaler = MinMaxScaler()
-        self.patience = 800
+        self.patience = 1000
         self.batch_size = 256
         self.lr = 0.0001
-        self.metrics = ['mean_absolute_error', 'mean_squared_error']
+        self.metrics_dict = {
+            'mean_squared_error': mean_squared_error,
+            'mean_absolute_error': mean_absolute_error,
+        }
 
         if params['is_test']:
             self.epochs = 10
@@ -185,7 +196,8 @@ class AnnReg(BaseEstimator):
 
         self.callbacks = []
         if not (self.params_exp['is_inference'] or self.params_exp['is_test']):
-            self.callbacks.append(EarlyStopping(monitor='val_loss', patience=self.patience, restore_best_weights=True))
+            self.callbacks.append(EarlyStopping(monitor='val_top_mean_squared_error', patience=self.patience,
+                                                restore_best_weights=True))
             self.callbacks.append(CustomTensorBoard(log_folder=log_name, params=self.params_exp,
                                                     is_inference=self.params_exp['is_inference']))
 
@@ -199,13 +211,19 @@ class AnnReg(BaseEstimator):
         model.add(Dense(20, activation='relu'))
         model.add(Dense(10, activation='relu'))
         model.add(Dense(10, activation='relu'))
-        model.add(Dense(1, name='redshift'))
+        model.add(Dense(2))
+        model.add(tfp.layers.DistributionLambda(
+            lambda t: tfd.Normal(loc=t[..., :1],
+                                 scale=1e-3 + tf.math.softplus(0.05 * t[..., 1:])),
+            name='redshift',
+        ))
 
         opt = Adam(lr=self.lr)
 
-        # negloglik = lambda y, p_y: -p_y.log_prob(y)
-        loss = {'redshift': 'mean_squared_error'}
-        model.compile(loss=loss, optimizer=opt, metrics=self.metrics)
+        negloglik = lambda y, p_y: -p_y.log_prob(y)
+        loss = {'redshift': negloglik}
+
+        model.compile(loss=loss, optimizer=opt)
 
         return model
 
@@ -215,10 +233,11 @@ class AnnReg(BaseEstimator):
 
         if validation_data_arr:
             validation_data_arr = [(self.scaler.transform(validation_data_arr[i][0]),
-                                    {'redshift': validation_data_arr[i][1]['redshift']},
+                                    validation_data_arr[i][1],
                                     validation_data_arr[i][2]) for i in range(len(validation_data_arr))]
 
-            validation_callback = AdditionalValidationSets(validation_data_arr[1:], metrics=self.metrics)
+            validation_callback = AdditionalValidationSets(
+                validation_data_arr, additional_metrics_dict=self.metrics_dict, model_wrapper=self)
             self.callbacks = [validation_callback] + self.callbacks
 
             validation_data = (validation_data_arr[0][0], validation_data_arr[0][1])
@@ -230,10 +249,13 @@ class AnnReg(BaseEstimator):
         self.network.fit(X, y, validation_data=validation_data, epochs=self.epochs, batch_size=self.batch_size,
                          callbacks=self.callbacks, verbose=1)
 
-    def predict(self, X, encoder=None):
-        X = self.scaler.transform(X)
+    def predict(self, X, encoder=None, scale_data=True):
+        X_to_pred = self.scaler.transform(X) if scale_data else X
         predictions_df = pd.DataFrame()
-        predictions_df['Z_PHOTO'] = self.network.predict(X)[:, 0]
+        # predictions_df['Z_PHOTO'] = self.network.predict(X_to_pred)[:, 0]
+        preds = self.network(X_to_pred)
+        predictions_df['Z_PHOTO'] = preds.mean()[:, 0]
+        predictions_df['Z_PHOTO_STDDEV'] = preds.stddev()[:, 0]
         return predictions_df
 
 
@@ -310,7 +332,8 @@ class AstroNet(BaseEstimator):
 
 
 class AdditionalValidationSets(Callback):
-    def __init__(self, validation_sets, metrics, verbose=0, batch_size=None):
+    def __init__(self, validation_sets, tracked_metric_names=None, additional_metrics_dict=None, model_wrapper=None,
+                 verbose=0, batch_size=None):
         """
         :param validation_sets:
         a list of 3-tuples (validation_data, validation_targets, validation_set_name)
@@ -329,14 +352,15 @@ class AdditionalValidationSets(Callback):
         self.history = {}
         self.verbose = verbose
         self.batch_size = batch_size
-        self.metrics = metrics
+        self.tracked_metric_names = tracked_metric_names
+        self.additional_metrics_dict = additional_metrics_dict
+        self.model_wrapper = model_wrapper
 
     def on_train_begin(self, logs=None):
         self.epoch = []
         self.history = {}
 
     def on_epoch_end(self, epoch, logs=None):
-        # logs = logs or {}
         self.epoch.append(epoch)
 
         # Record the same values as History() as well
@@ -353,16 +377,39 @@ class AdditionalValidationSets(Callback):
             else:
                 raise ValueError()
 
+            # First, standard model evaluation on tracked metrics
             results = self.model.evaluate(x=validation_data, y=validation_targets, verbose=self.verbose,
                                           sample_weight=sample_weights, batch_size=self.batch_size)
-
+            if not isinstance(results, Iterable):
+                results = [results]
             for i, result in enumerate(results):
                 if i == 0:
                     value_name = 'val_' + validation_set_name + '_loss'
                 else:
-                    value_name = 'val_' + validation_set_name + '_' + self.metrics[i - 1]
+                    value_name = 'val_' + validation_set_name + '_' + self.tracked_metric_names[i - 1]
                 self.history.setdefault(value_name, []).append(result)
                 logs[value_name] = result
+
+            # Second, additional metrics with custom predict function from model wrapper
+            if self.additional_metrics_dict:
+
+                # TODO: should not assume redshift (though it's never going to be anything else?)
+                preds = self.model_wrapper.predict(validation_data, scale_data=False)
+                y_pred = preds['Z_PHOTO']
+
+                print('\n{}: z mean: {}'.format(validation_set_name, preds['Z_PHOTO'].mean()))
+                print('{}: z std: {}'.format(validation_set_name, preds['Z_PHOTO'].std()))
+                print('{}: z std mean: {}'.format(validation_set_name, preds['Z_PHOTO_STDDEV'].mean()))
+                print('{}: z std std: {}'.format(validation_set_name, preds['Z_PHOTO_STDDEV'].std()))
+                print('')
+
+                for metric_name, metric_func in self.additional_metrics_dict.items():
+                    result = metric_func(validation_targets['redshift'], y_pred)
+                    value_name = 'val_{}_{}'.format(validation_set_name, metric_name)
+                    self.history.setdefault(value_name, []).append(result)
+                    logs[value_name] = result
+
+        super().on_epoch_end(epoch, logs)
 
 
 class CustomTensorBoard(TensorBoard):
@@ -410,13 +457,16 @@ class CustomTensorBoard(TensorBoard):
 
         # Check if additional random validation sets present and put val_random on the same plot with train
         if any([log_name.startswith('val_random') for log_name in logs_to_send]):
-            for key in logs_to_send.keys():
+            for key in list(logs_to_send):
+                # TODO: if val_loss != val_random_loss to val_random_loss -> val_loss
                 if key.startswith('val_random'):
                     key_1 = key.replace('val_random', 'val')
                     key_2 = key.replace('val_random', 'val_' + self.main_test_name)
-                    logs_to_send[key_2] = logs_to_send[key_1]
+                    # Move loss used in training to it's proper name if not already done in validation
+                    if key_1 in logs_to_send:
+                        logs_to_send[key_2] = logs_to_send[key_1]
+                    # Move random score in order to plot with training scores
                     logs_to_send[key_1] = logs_to_send[key]
-                    logs_to_send.pop(key)
 
         super().on_epoch_end(epoch, logs_to_send)
 
