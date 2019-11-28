@@ -1,14 +1,18 @@
 import os
+import math
 from collections.__init__ import defaultdict, OrderedDict
 
+import numpy as np
+import pandas as pd
+from scipy import stats
 import seaborn as sns
 from matplotlib import pyplot as plt
 from sklearn.metrics import accuracy_score, f1_score, confusion_matrix, log_loss, roc_curve, auc, precision_score, \
     recall_score, average_precision_score, precision_recall_curve, mean_squared_error, r2_score
 
-from data import EXTERNAL_QSO, BASE_CLASSES, BAND_COLUMNS, get_mag_str, clean_gaia, process_2df,\
+from data import DATA_PATH, EXTERNAL_QSO, BASE_CLASSES, BAND_COLUMNS, get_mag_str, clean_gaia, process_2df, \
     read_fits_to_pandas
-from utils import *
+from utils import assign_redshift, pretty_print_magnitude, get_column_desc, get_map
 from plotting import plot_confusion_matrix, plot_roc_curve, plot_precision_recall_curve, get_line_style, \
     get_cubehelix_palette, plot_proba_histograms, plot_proba_against_size, get_plot_text
 
@@ -23,11 +27,17 @@ def relative_err_std(y_true, y_pred):
     return e.std()
 
 
-def experiment_report(predictions, test_subset=None, z_max=None, col_true='CLASS'):
+def experiment_report(predictions, preds_z_qso=None, preds_z_galaxy=None, test_subset=None, z_max=None,
+                      col_true='CLASS'):
     np.set_printoptions(precision=4)
 
+    predictions = add_kids_columns(predictions)
+
     if test_subset:
-        predictions = predictions.loc[predictions['test_subset'] == test_subset]
+        mask = predictions['test_subset'] == test_subset
+        predictions = predictions.loc[mask]
+        preds_z_qso = preds_z_qso.loc[mask] if preds_z_qso is not None else None
+        preds_z_galaxy = preds_z_galaxy.loc[mask] if preds_z_galaxy is not None else None
 
     if 'CLASS_PHOTO' in predictions.columns:
         multiclass_report(predictions, col_true=col_true)
@@ -36,7 +46,8 @@ def experiment_report(predictions, test_subset=None, z_max=None, col_true='CLASS
         if 'Z' in predictions.columns:
             completeness_z_report(predictions, col_true=col_true, z_max=z_max)
 
-    if 'Z_PHOTO' in predictions.columns and 'Z' in predictions.columns:
+    if (('Z_PHOTO' in predictions.columns) or (preds_z_qso is not None)) and 'Z' in predictions.columns:
+        predictions = assign_redshift(predictions, preds_z_qso, preds_z_galaxy)
         redshift_metrics(predictions)
         redshift_scatter_plots(predictions, z_max)
         # redshift_binned_stats(predictions)
@@ -45,6 +56,13 @@ def experiment_report(predictions, test_subset=None, z_max=None, col_true='CLASS
     if 'CLASS_PHOTO' in predictions.columns and 'Z_PHOTO' in predictions.columns and 'Z' in predictions.columns:
         precision_z_report(predictions, z_max=z_max)
         classification_and_redshift_report(predictions)
+        redshift_uncertainity_cleaning_report(predictions)
+
+
+def add_kids_columns(preds):
+    kids_x_sdss = read_fits_to_pandas(os.path.join(DATA_PATH, 'KiDS/DR4/KiDS.DR4.x.SDSS.DR14.fits'),
+                                      ['ID', 'Z_B', 'Z_ML'])
+    return preds.merge(kids_x_sdss, on=['ID'])
 
 
 def multiclass_report(predictions, col_true='CLASS'):
@@ -150,56 +168,60 @@ def completeness_z_report(predictions, col_true='CLASS', z_max=None):
 
 def redshift_metrics(predictions):
     classes = np.unique(predictions['CLASS'])
+    # Two redshift assignment options
+    z_photo_wspec_col = 'Z_PHOTO_WSPEC' if 'Z_PHOTO_WSPEC' in predictions else 'Z_PHOTO'
+    reports = [('CLASS', z_photo_wspec_col, 'spec. subsets'), ('CLASS', 'Z_PHOTO', 'photo subsets')]
+    for class_col, z_photo_col, name in reports:
+        print(name)
+        # Standard metrics
+        metrics = [('MSE', mean_squared_error), ('R2', r2_score),
+                   ('rel. error', relative_err_mean), ('rel. error std', relative_err_std)]
+        for metric_name, metric_func in metrics:
+            score = np.around(metric_func(predictions['Z'], predictions[z_photo_col]), 4)
+            print('{metric_name}: {score}'.format(metric_name=metric_name, score=score))
 
-    # Standard metrics
-    metrics = [('MSE', mean_squared_error), ('R2', r2_score),
-               ('rel. error', relative_err_mean), ('rel. error std', relative_err_std)]
-    for metric_name, metric_func in metrics:
-        score = np.around(metric_func(predictions['Z'], predictions['Z_PHOTO']), 4)
-        print('{metric_name}: {score}'.format(metric_name=metric_name, score=score))
-
-        # Divided for classes
-        for (class_col, str_add) in [('CLASS', ''), ('CLASS_PHOTO', ' photo')]:
+            # Divided for classes
             if class_col not in predictions:
                 continue
-            scores = np.around(metric_class_split(predictions['Z'], predictions['Z_PHOTO'], metric=metric_func,
+            scores = np.around(metric_class_split(predictions['Z'], predictions[z_photo_col], metric=metric_func,
                                                   classes=predictions[class_col]), 4)
-            print(', '.join(
-                ['{class_name}{str_add}: {score}'.format(class_name=class_name, str_add=str_add, score=score) for
-                 class_name, score in zip(classes, scores)]))
+            print(', '.join(['{class_name}: {score}'.format(class_name=class_name, score=score) for class_name, score in
+                             zip(classes, scores)]))
 
 
 def redshift_scatter_plots(predictions, z_max):
     # Plot true vs predicted redshifts
-    plot_z_true_vs_pred(predictions, 'Z_PHOTO', z_max)
+    z_photo_col = 'Z_PHOTO_WSPEC' if 'Z_PHOTO_WSPEC' in predictions else 'Z_PHOTO'
+    z_photo_stddev_col = 'Z_PHOTO_STDDEV_WSPEC' if 'Z_PHOTO_STDDEV_WSPEC' in predictions else 'Z_PHOTO_STDDEV'
+    plot_z_true_vs_pred(predictions, z_photo_col, z_max, z_photo_stddev_col)
     # Plot Z_B for comparison
     plot_z_true_vs_pred(predictions, 'Z_B', z_max)
     # Plot Z_ML for comparison
     plot_z_true_vs_pred(predictions, 'Z_ML', z_max)
 
 
-def plot_z_true_vs_pred(predictions, z_col, z_max):
+def plot_z_true_vs_pred(predictions, z_pred_col, z_max, z_pred_stddev_col=None):
     z_max = {'GALAXY': min(1, z_max), 'QSO': z_max}
     for c in ['GALAXY', 'QSO']:
         preds_c = predictions.loc[predictions['CLASS'] == c]
 
         # TODO: refactor
         plt.figure()
-        ax = sns.scatterplot(x='Z', y=z_col, data=preds_c, size='Z_PHOTO_STDDEV', hue='Z_PHOTO_STDDEV',
+        ax = sns.scatterplot(x='Z', y=z_pred_col, data=preds_c, size=z_pred_stddev_col, hue=z_pred_stddev_col,
                              sizes=(60, 20), palette='rainbow_r', alpha=0.7)
         plt.plot(range(z_max[c] + 1))
         ax.set(xlim=(0, z_max[c]), ylim=(0, z_max[c]))
         plt.xlabel(get_plot_text('Z'))
-        plt.ylabel(get_plot_text(z_col))
+        plt.ylabel(get_plot_text(z_pred_col))
         plt.title(get_plot_text(c))
         plt.show()
 
         plt.figure()
-        ax = sns.kdeplot(preds_c['Z'], preds_c[z_col], shade=True)
+        ax = sns.kdeplot(preds_c['Z'], preds_c[z_pred_col], shade=True)
         plt.plot(range(z_max[c] + 1))
         ax.set(xlim=(0, z_max[c]), ylim=(0, z_max[c]))
         plt.xlabel(get_plot_text('Z'))
-        plt.ylabel(get_plot_text(z_col))
+        plt.ylabel(get_plot_text(z_pred_col))
         plt.title(get_plot_text(c))
         plt.show()
 
@@ -270,35 +292,74 @@ def classification_and_redshift_report(predictions):
     classes = np.unique(predictions['CLASS'])
     color_palette = get_cubehelix_palette(len(classes))
 
-    # True class plots
-    metrics_to_plot = OrderedDict([('MSE', mean_squared_error)])
-    plots_to_make = ['CLASS', 'CLASS_PHOTO']
-    for cls_col in plots_to_make:
-        for metric_name, metric_func in metrics_to_plot.items():
+    metrics_to_plot = OrderedDict([('MSE', mean_squared_error), ('R2', r2_score),
+                                   ('rel. error', relative_err_mean), ('rel. err. std.', relative_err_std)])
+    for metric_name, metric_func in metrics_to_plot.items():
+        plt.figure()
 
-            plt.figure()
-            for i, cls in enumerate(classes):
-                preds_class = predictions.loc[predictions[cls_col] == cls]
-                is_cls_photo = (cls_col == 'CLASS_PHOTO')
-                label = get_plot_text(cls, is_photo=is_cls_photo)
+        for i, cls in enumerate(classes):
+            preds_class = predictions.loc[predictions['CLASS_PHOTO'] == cls]
+            label = get_plot_text(cls, is_photo=True)
 
-                # Get scores limited by classification probability thresholds
-                metric_values = []
-                for thr in thresholds:
-                    preds_lim = preds_class.loc[preds_class['{}_PHOTO'.format(cls)] >= thr]
-                    metric_values.append(np.around(metric_func(preds_lim['Z'], preds_lim['Z_PHOTO']), 4))
+            # Get scores limited by classification probability thresholds
+            metric_values = []
+            for thr in thresholds:
+                preds_lim = preds_class.loc[preds_class['{}_PHOTO'.format(cls)] >= thr]
+                metric_values.append(np.around(metric_func(preds_lim['Z'], preds_lim['Z_PHOTO']), 4))
 
-                plt.plot(thresholds, metric_values, label=label, color=color_palette[i],
-                         linestyle=get_line_style(i))
-                plt.xlabel('minimum classification probability')
-                plt.ylabel(metric_name)
-                ax = plt.axes()
-                ax.yaxis.grid(True)
+            plt.plot(thresholds, metric_values, label=label, color=color_palette[i],
+                     linestyle=get_line_style(i))
 
-            plt.legend()
-            plt.show()
+        plt.xlabel('minimum classification probability')
+        plt.ylabel(metric_name)
+        ax = plt.axes()
+        ax.yaxis.grid(True)
+        plt.legend()
+        plt.show()
 
     plot_proba_against_size(predictions.loc[predictions['CLASS_PHOTO'] == 'QSO'], column='QSO_PHOTO', x_lim=(0.3, 1))
+
+
+def redshift_uncertainity_cleaning_report(predictions):
+    step = 0.02
+    classes = ['QSO', 'GALAXY']
+    color_palette = get_cubehelix_palette(len(classes))
+
+    metrics_to_plot = OrderedDict([('MSE', mean_squared_error), ('R2', r2_score),
+                                   ('rel. error', relative_err_mean), ('rel. err. std.', relative_err_std)])
+    for metric_name, metric_func in metrics_to_plot.items():
+        plt.figure()
+
+        for i, cls in enumerate(classes):
+            preds_class = predictions.loc[predictions['CLASS_PHOTO'] == cls]
+            thresholds = np.flip(np.arange(preds_class['Z_PHOTO'].min() + step, 1 + step, step))
+            label = get_plot_text(cls, is_photo=True)
+
+            # Get scores limited by classification probability thresholds
+            metric_values = []
+            for thr in thresholds:
+                preds_lim = preds_class.loc[preds_class['Z_PHOTO_STDDEV'] <= thr]
+                metric_values.append(np.around(metric_func(preds_lim['Z'], preds_lim['Z_PHOTO']), 4))
+
+            plt.plot(thresholds, metric_values, label=label, color=color_palette[i],
+                     linestyle=get_line_style(i))
+            plt.xlabel('maximum $z_{photo}$ std. dev. - uncertainty')
+            plt.ylabel(metric_name)
+            ax = plt.axes()
+            ax.yaxis.grid(True)
+
+        plt.legend()
+        plt.show()
+
+    # TODO: add galaxies?
+    # Size plot
+    preds_qso = predictions.loc[predictions['CLASS_PHOTO'] == 'QSO']
+    thresholds = np.flip(np.arange(preds_qso['Z_PHOTO'].min() + step, 1 + step, step))
+    data_size_arr = [preds_qso.loc[preds_qso['Z_PHOTO_STDDEV'] <= thr].shape[0] for thr in thresholds]
+    plt.plot(thresholds, data_size_arr)
+    plt.xlabel('maximum $z_{photo}$ std. dev. - uncertainty')
+    plt.ylabel('{} size'.format(get_plot_text('QSO', is_photo=True)))
+    plt.show()
 
 
 # TODO: has to be limited to narrow redshift range
@@ -398,7 +459,7 @@ def number_counts_multidata(data_dict, x_lim, band='r', legend_loc='upper left')
         for i in range(len(bins) - 1):
             data_bin = data.loc[data['bin'] == i]
             counts = counts.append({'objects': data_bin.shape[0], band_column: bin_titles[i], 'dataset': data_name},
-                                    ignore_index=True)
+                                   ignore_index=True)
 
     sns.catplot(x=band_column, y='objects', hue='dataset', data=counts, kind='bar',
                 aspect=1.6, height=5, legend_out=False, palette='cubehelix')
@@ -535,7 +596,8 @@ def test_against_external_catalog(ext_catalog, catalog, columns=BAND_COLUMNS, cl
             for c in columns:
                 plt.figure()
                 for t in BASE_CLASSES:
-                    sns.distplot(catalogs_cross.loc[catalogs_cross['CLASS_PHOTO'] == t][c], label=t, kde=False, rug=False,
+                    sns.distplot(catalogs_cross.loc[catalogs_cross['CLASS_PHOTO'] == t][c], label=t, kde=False,
+                                 rug=False,
                                  hist_kws={'alpha': 0.5, 'histtype': 'step'})
                     plt.title(title)
                 plt.legend()

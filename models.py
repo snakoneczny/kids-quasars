@@ -10,7 +10,7 @@ from xgboost import XGBClassifier, XGBRegressor
 import tensorflow as tf
 import tensorflow_probability as tfp
 from tensorflow.keras.models import Sequential, Model
-from tensorflow.keras.layers import Input, Dense
+from tensorflow.keras.layers import Input, Dense, Dropout
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras import backend as K
 from tensorflow.keras.callbacks import Callback, TensorBoard, EarlyStopping
@@ -168,9 +168,11 @@ class AnnReg(BaseEstimator):
         self.params_exp = params
         self.network = None
         self.scaler = MinMaxScaler()
-        self.patience = 1000
+        self.patience = 2000
         self.batch_size = 256
         self.lr = 0.0001
+        self.dropout_rate = 0.2
+
         self.metrics_dict = {
             'mean_squared_error': mean_squared_error,
             'mean_absolute_error': mean_absolute_error,
@@ -186,7 +188,7 @@ class AnnReg(BaseEstimator):
             else:
                 self.epochs = 340
         else:
-            self.epochs = 4000
+            self.epochs = 10000
 
         base_name = 'z-{}'.format(params['specialization']).lower() if params['specialization'] else 'z'
         log_name = '{}, lr={}, bs={}, {}'.format(base_name, self.lr, self.batch_size,
@@ -196,21 +198,29 @@ class AnnReg(BaseEstimator):
 
         self.callbacks = []
         if not (self.params_exp['is_inference'] or self.params_exp['is_test']):
-            self.callbacks.append(EarlyStopping(monitor='val_top_mean_squared_error', patience=self.patience,
+            self.callbacks.append(EarlyStopping(monitor='val_loss', patience=self.patience,
                                                 restore_best_weights=True))
             self.callbacks.append(CustomTensorBoard(log_folder=log_name, params=self.params_exp,
                                                     is_inference=self.params_exp['is_inference']))
 
     def __create_network(self, params):
         model = Sequential()
-        model.add(Dense(80, input_dim=params['n_features'], activation='relu'))
+        model.add(Dense(100, input_dim=params['n_features'], activation='relu'))
+        model.add(Dropout(self.dropout_rate))
+        model.add(Dense(100, activation='relu'))
+        model.add(Dropout(self.dropout_rate))
         model.add(Dense(80, activation='relu'))
+        model.add(Dropout(self.dropout_rate))
+        model.add(Dense(80, activation='relu'))
+        model.add(Dropout(self.dropout_rate))
         model.add(Dense(40, activation='relu'))
+        model.add(Dropout(self.dropout_rate))
         model.add(Dense(40, activation='relu'))
+        model.add(Dropout(self.dropout_rate))
         model.add(Dense(20, activation='relu'))
+        model.add(Dropout(self.dropout_rate))
         model.add(Dense(20, activation='relu'))
-        model.add(Dense(10, activation='relu'))
-        model.add(Dense(10, activation='relu'))
+        model.add(Dropout(self.dropout_rate))
         model.add(Dense(2))
         model.add(tfp.layers.DistributionLambda(
             lambda t: tfd.Normal(loc=t[..., :1],
@@ -252,82 +262,9 @@ class AnnReg(BaseEstimator):
     def predict(self, X, encoder=None, scale_data=True):
         X_to_pred = self.scaler.transform(X) if scale_data else X
         predictions_df = pd.DataFrame()
-        # predictions_df['Z_PHOTO'] = self.network.predict(X_to_pred)[:, 0]
         preds = self.network(X_to_pred)
         predictions_df['Z_PHOTO'] = preds.mean()[:, 0]
         predictions_df['Z_PHOTO_STDDEV'] = preds.stddev()[:, 0]
-        return predictions_df
-
-
-class AstroNet(BaseEstimator):
-
-    def __init__(self, params):
-        self.params_exp = params
-        self.network = None
-        self.scaler = MinMaxScaler()
-        self.epochs = 4000
-        self.patience = 800
-        self.batch_size = 256
-        self.lr = 0.0001
-
-        log_name = 'lr={}, bs={}, {}'.format(self.lr, self.batch_size, params['timestamp_start'].replace('_', ' '))
-        if params['tag']:
-            log_name = '{}, {}'.format(params['tag'], log_name)
-
-        tensorboard = CustomTensorBoard(log_folder=log_name, params=self.params_exp,
-                                        is_inference=self.params_exp['is_inference'])
-        early_stopping = EarlyStopping(monitor='val_redshift_loss', patience=self.patience, restore_best_weights=True)
-        self.callbacks = [tensorboard, early_stopping]
-
-    def __create_network(self, params):
-        inputs = Input(shape=(params['n_features'],))
-
-        # Main branch
-        x = Dense(80, activation='relu')(inputs)
-        x = Dense(80, activation='relu')(x)
-        x = Dense(40, activation='relu')(x)
-        x = Dense(40, activation='relu')(x)
-        x = Dense(20, activation='relu')(x)
-        x = Dense(20, activation='relu')(x)
-        x = Dense(10, activation='relu')(x)
-
-        # Outputs
-        y = Dense(10, activation='relu')(x)
-        preds_y = Dense(3, activation='softmax', name='category')(y)
-
-        z = Dense(20, activation='relu')(x)
-        preds_z = Dense(1, name='redshift')(z)
-
-        model = Model(inputs=inputs, outputs=[preds_y, preds_z], name='astronet')
-
-        losses = {
-            'category': 'categorical_crossentropy',
-            'redshift': 'mean_squared_error',
-        }
-        loss_weights = {'category': 1.0, 'redshift': 1.0}
-
-        opt = Adam(self.lr)
-        model.compile(optimizer=opt, loss=losses, loss_weights=loss_weights,
-                      metrics=['categorical_crossentropy', 'accuracy', 'mean_squared_error', 'mean_absolute_error'])
-
-        return model
-
-    def fit(self, X, y, validation_data=None):
-        X = self.scaler.fit_transform(X)
-        y, validation_data = create_multioutput_data(y, validation_data, self.scaler)
-        self.network = self.__create_network(self.params_exp)
-        self.network.fit(X, y, validation_data=validation_data, epochs=self.epochs, batch_size=self.batch_size,
-                         callbacks=self.callbacks, verbose=1)
-
-    def predict(self, X, encoder):
-        X = self.scaler.transform(X)
-        predictions = self.network.predict(X)
-
-        y_pred_proba = predictions[0]
-        z_pred = predictions[1]
-
-        predictions_df = decode_clf_preds(y_pred_proba, encoder)
-        predictions_df['Z_PHOTO'] = z_pred
         return predictions_df
 
 
@@ -397,11 +334,8 @@ class AdditionalValidationSets(Callback):
                 preds = self.model_wrapper.predict(validation_data, scale_data=False)
                 y_pred = preds['Z_PHOTO']
 
-                print('\n{}: z mean: {}'.format(validation_set_name, preds['Z_PHOTO'].mean()))
-                print('{}: z std: {}'.format(validation_set_name, preds['Z_PHOTO'].std()))
-                print('{}: z std mean: {}'.format(validation_set_name, preds['Z_PHOTO_STDDEV'].mean()))
+                print('\n{}: z std mean: {}'.format(validation_set_name, preds['Z_PHOTO_STDDEV'].mean()))
                 print('{}: z std std: {}'.format(validation_set_name, preds['Z_PHOTO_STDDEV'].std()))
-                print('')
 
                 for metric_name, metric_func in self.additional_metrics_dict.items():
                     result = metric_func(validation_targets['redshift'], y_pred)
@@ -511,7 +445,6 @@ def get_model(cfg):
         'xgb-redshift': build_xgb_reg,
         'ann-class': AnnClf,
         'ann-redshift': AnnReg,
-        'ann-class-redshift': AstroNet,
     }
 
     name = cfg['model']
