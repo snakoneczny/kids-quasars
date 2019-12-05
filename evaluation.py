@@ -170,7 +170,7 @@ def redshift_metrics(predictions):
     classes = np.unique(predictions['CLASS'])
     # Two redshift assignment options
     z_photo_wspec_col = 'Z_PHOTO_WSPEC' if 'Z_PHOTO_WSPEC' in predictions else 'Z_PHOTO'
-    reports = [('CLASS', z_photo_wspec_col, 'spec. subsets'), ('CLASS', 'Z_PHOTO', 'photo subsets')]
+    reports = [('CLASS', z_photo_wspec_col, 'spec. subsets'), ('CLASS_PHOTO', 'Z_PHOTO', 'photo subsets')]
     for class_col, z_photo_col, name in reports:
         print(name)
         # Standard metrics
@@ -205,15 +205,27 @@ def plot_z_true_vs_pred(predictions, z_pred_col, z_max, z_pred_stddev_col=None):
     for c in ['GALAXY', 'QSO']:
         preds_c = predictions.loc[predictions['CLASS'] == c]
 
+        if z_pred_stddev_col in preds_c:
+            colors = preds_c[z_pred_stddev_col]
+            min_val = preds_c[z_pred_stddev_col].min()
+            max_val = preds_c[z_pred_stddev_col].max()
+            sizes = (1 - ((preds_c[z_pred_stddev_col] - min_val) / (max_val - min_val))) * 40 + 20
+        else:
+            colors = None
+            sizes = None
+
         # TODO: refactor
-        plt.figure()
-        ax = sns.scatterplot(x='Z', y=z_pred_col, data=preds_c, size=z_pred_stddev_col, hue=z_pred_stddev_col,
-                             sizes=(60, 20), palette='rainbow_r', alpha=0.7)
+        f, ax = plt.subplots()
+        points = ax.scatter(preds_c['Z'], preds_c[z_pred_col], c=colors, s=sizes, cmap='rainbow_r', alpha=0.7,
+                            edgecolors='w')
         plt.plot(range(z_max[c] + 1))
         ax.set(xlim=(0, z_max[c]), ylim=(0, z_max[c]))
         plt.xlabel(get_plot_text('Z'))
         plt.ylabel(get_plot_text(z_pred_col))
         plt.title(get_plot_text(c))
+        if z_pred_stddev_col in preds_c:
+            cb = f.colorbar(points)
+            cb.set_label(get_plot_text(z_pred_stddev_col))
         plt.show()
 
         plt.figure()

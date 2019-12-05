@@ -9,7 +9,7 @@ from env_config import DATA_PATH
 BASE_CLASSES = ['QSO', 'STAR', 'GALAXY']
 
 COLUMNS_KIDS = ['ID', 'RAJ2000', 'DECJ2000', 'Flag', 'IMAFLAGS_ISO', 'MASK', 'CLASS_STAR', 'SG2DPHOT', 'Z_B']
-COLUMNS_SDSS = ['CLASS', 'SUBCLASS', 'Z', 'Z_ERR', 'ZWARNING', 'Z_NOQSO', 'Z_ERR_NOQSO', 'ZWARNING_NOQSO']
+COLUMNS_SDSS = ['CLASS', 'SUBCLASS', 'Z', 'Z_ERR', 'ZWARNING']
 COLUMNS_GAIA = ['parallax', 'parallax_error', 'pmra', 'pmra_error', 'pmdec', 'pmdec_error']
 
 BITMAP_LENGTHS = {
@@ -319,15 +319,22 @@ def process_bitmaps(data, bitmap_cols=None):
 
 def clean_sdss(data, with_print=True):
     # Keep old values of Z and ZWARNING and merge them with no-qso ones for galaxy subset
-    for c in ['Z', 'Z_ERR', 'ZWARNING']:
-        data.loc[:, '{}_org'.format(c)] = data.loc[:, c]
-    data_galaxy = data.loc[data['CLASS'] == 'GALAXY']
-    for c in ['Z', 'Z_ERR', 'ZWARNING']:
-        data_galaxy.loc[:, c] = data_galaxy.loc[:, '{}_NOQSO'.format(c)]
-    data.update(data_galaxy)
+    # for c in ['Z', 'Z_ERR', 'ZWARNING']:
+    #     data.loc[:, '{}_org'.format(c)] = data.loc[:, c]
+    # data_galaxy = data.loc[(data['CLASS'] == 'GALAXY') & (data['CLASS_NOQSO'] == 'GALAXY')]
+    # for c in ['Z', 'Z_ERR', 'ZWARNING']:
+    #     data_galaxy.loc[:, c] = data_galaxy.loc[:, '{}_NOQSO'.format(c)]
+    # data.update(data_galaxy)
 
     data_cleaned = data.loc[data['ZWARNING'] == 0].reset_index(drop=True)
-    if with_print: print('Cleaning SDSS: {} left'.format(data_cleaned.shape[0]))
+    if with_print:
+        print('Cleaning SDSS: {} left'.format(data_cleaned.shape[0]))
+
+    # data_cleaned = data_cleaned.drop(
+    #     data_cleaned.loc[(data_cleaned['CLASS'] == 'GALAXY') & (data_cleaned['Z'] < 1e-3)].index)
+    # if with_print:
+    #     print('Dropping galaxies at z < 0.001: {} left'.format(data_cleaned.shape[0]))
+
     return data_cleaned
 
 

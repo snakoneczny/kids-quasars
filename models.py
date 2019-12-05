@@ -20,14 +20,16 @@ tfd = tfp.distributions
 
 
 def build_rf_clf(params):
+    n_estimators = 10 if params['is_test'] else 400
     return RandomForestClassifier(
-        n_estimators=400, criterion='gini', random_state=491237, n_jobs=24,
+        n_estimators=n_estimators, criterion='gini', random_state=491237, n_jobs=12, verbose=2
     )
 
 
 def build_rf_reg(params):
+    n_estimators = 10 if params['is_test'] else 400
     return RandomForestRegressor(
-        n_estimators=400, criterion='mse', random_state=491237, n_jobs=12,
+        n_estimators=n_estimators, criterion='mse', random_state=491237, n_jobs=12, verbose=2
     )
 
 
@@ -60,7 +62,7 @@ def build_xgb_reg(params):
             max_depth=5, learning_rate=0.1, gamma=0, min_child_weight=20, colsample_bytree=0.5, subsample=1,
             scale_pos_weight=1, reg_alpha=1, reg_lambda=1, n_estimators=100000, objective='reg:linear',
             booster='gbtree', max_delta_step=0, colsample_bylevel=1, colsample_bynode=1, base_score=0.5,
-            random_state=1587, missing=None, importance_type='gain', verbosity=0, n_jobs=12,
+            random_state=1587, missing=None, importance_type='gain', verbosity=0, n_jobs=24,
         )
 
     elif params['specialization'] == 'QSO':
@@ -69,7 +71,7 @@ def build_xgb_reg(params):
             max_depth=5, learning_rate=0.1, gamma=0, min_child_weight=10, colsample_bytree=0.6, subsample=0.4,
             scale_pos_weight=1, reg_alpha=0, reg_lambda=1, n_estimators=100000, objective='reg:linear',
             booster='gbtree', max_delta_step=0, colsample_bylevel=1, colsample_bynode=1, base_score=0.5,
-            random_state=1587, missing=None, importance_type='gain', verbosity=0, n_jobs=12,
+            random_state=1587, missing=None, importance_type='gain', verbosity=0, n_jobs=24,
         )
 
     elif params['specialization'] == 'GALAXY':
@@ -77,7 +79,7 @@ def build_xgb_reg(params):
             max_depth=7, learning_rate=0.1, gamma=0, min_child_weight=20, colsample_bytree=1, subsample=1,
             scale_pos_weight=1, reg_alpha=0, reg_lambda=2, n_estimators=100000, objective='reg:linear',
             booster='gbtree', max_delta_step=0, colsample_bylevel=1, colsample_bynode=1, base_score=0.5,
-            random_state=1587, missing=None, importance_type='gain', verbosity=0, n_jobs=12,
+            random_state=1587, missing=None, importance_type='gain', verbosity=0, n_jobs=24,
         )
 
     else:
@@ -90,9 +92,10 @@ class AnnClf(BaseEstimator):
         self.params_exp = params
         self.network = None
         self.scaler = MinMaxScaler()
-        self.patience = 400
+        self.patience = 800
         self.batch_size = 256
         self.lr = 0.0001
+        self.dropout_rate = 0.2
         self.metric_names = ['categorical_crossentropy', 'accuracy']
 
         if params['is_test']:
@@ -115,14 +118,22 @@ class AnnClf(BaseEstimator):
 
     def __create_network(self, params):
         model = Sequential()
-        model.add(Dense(80, input_dim=params['n_features'], activation='relu'))
+        model.add(Dense(100, input_dim=params['n_features'], activation='relu'))
+        model.add(Dropout(self.dropout_rate))
+        model.add(Dense(100, activation='relu'))
+        model.add(Dropout(self.dropout_rate))
         model.add(Dense(80, activation='relu'))
+        model.add(Dropout(self.dropout_rate))
+        model.add(Dense(80, activation='relu'))
+        model.add(Dropout(self.dropout_rate))
         model.add(Dense(40, activation='relu'))
+        model.add(Dropout(self.dropout_rate))
         model.add(Dense(40, activation='relu'))
+        model.add(Dropout(self.dropout_rate))
         model.add(Dense(20, activation='relu'))
+        model.add(Dropout(self.dropout_rate))
         model.add(Dense(20, activation='relu'))
-        model.add(Dense(10, activation='relu'))
-        model.add(Dense(10, activation='relu'))
+        model.add(Dropout(self.dropout_rate))
         model.add(Dense(3, activation='softmax', name='category'))
 
         opt = Adam(lr=self.lr)
@@ -334,8 +345,8 @@ class AdditionalValidationSets(Callback):
                 preds = self.model_wrapper.predict(validation_data, scale_data=False)
                 y_pred = preds['Z_PHOTO']
 
-                print('\n{}: z std mean: {}'.format(validation_set_name, preds['Z_PHOTO_STDDEV'].mean()))
-                print('{}: z std std: {}'.format(validation_set_name, preds['Z_PHOTO_STDDEV'].std()))
+                # print('\n{}: z std mean: {}'.format(validation_set_name, preds['Z_PHOTO_STDDEV'].mean()))
+                # print('{}: z std std: {}'.format(validation_set_name, preds['Z_PHOTO_STDDEV'].std()))
 
                 for metric_name, metric_func in self.additional_metrics_dict.items():
                     result = metric_func(validation_targets['redshift'], y_pred)
