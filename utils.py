@@ -223,7 +223,8 @@ def assign_redshift(preds_clf, preds_z_qso, preds_z_galaxy):
         for cls, preds_z in [('QSO', preds_z_qso), ('GALAXY', preds_z_galaxy)]:
             mask = (preds_clf[class_column] == cls)
             for col in ['Z_PHOTO', 'Z_PHOTO_STDDEV']:
-                preds_clf.loc[mask, col + column_suffix] = preds_z.loc[mask, col]
+                if col in preds_z:  # STDDEV might not be there
+                    preds_clf.loc[mask, col + column_suffix] = preds_z.loc[mask, col]
         # Star
         preds_clf.loc[preds_clf[class_column] == 'STAR', 'Z_PHOTO' + column_suffix] = 0
     return preds_clf

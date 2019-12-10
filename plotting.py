@@ -141,7 +141,7 @@ def plot_confusion_matrix(cm, classes, normalize=False, title='SDSS'):
     plt.imshow(cm, interpolation='nearest', cmap=cmap)
     plt.colorbar()
     tick_marks = np.arange(len(classes))
-    plt.xticks(tick_marks, [get_plot_text(cls, is_photo=True) for cls in classes], rotation=45)
+    plt.xticks(tick_marks, [get_plot_text(cls, is_photo=True) for cls in classes])
     plt.yticks(tick_marks, [get_plot_text(cls) for cls in classes])
 
     fmt = '.2f' if normalize else 'd'

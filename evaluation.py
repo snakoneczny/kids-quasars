@@ -47,7 +47,8 @@ def experiment_report(predictions, preds_z_qso=None, preds_z_galaxy=None, test_s
             completeness_z_report(predictions, col_true=col_true, z_max=z_max)
 
     if (('Z_PHOTO' in predictions.columns) or (preds_z_qso is not None)) and 'Z' in predictions.columns:
-        predictions = assign_redshift(predictions, preds_z_qso, preds_z_galaxy)
+        if preds_z_qso is not None:
+            predictions = assign_redshift(predictions, preds_z_qso, preds_z_galaxy)
         redshift_metrics(predictions)
         redshift_scatter_plots(predictions, z_max)
         # redshift_binned_stats(predictions)
@@ -56,7 +57,8 @@ def experiment_report(predictions, preds_z_qso=None, preds_z_galaxy=None, test_s
     if 'CLASS_PHOTO' in predictions.columns and 'Z_PHOTO' in predictions.columns and 'Z' in predictions.columns:
         precision_z_report(predictions, z_max=z_max)
         classification_and_redshift_report(predictions)
-        redshift_uncertainity_cleaning_report(predictions)
+        if 'Z_PHOTO_STDDEV' in predictions:
+            redshift_uncertainity_cleaning_report(predictions)
 
 
 def add_kids_columns(preds):
@@ -194,10 +196,6 @@ def redshift_scatter_plots(predictions, z_max):
     z_photo_col = 'Z_PHOTO_WSPEC' if 'Z_PHOTO_WSPEC' in predictions else 'Z_PHOTO'
     z_photo_stddev_col = 'Z_PHOTO_STDDEV_WSPEC' if 'Z_PHOTO_STDDEV_WSPEC' in predictions else 'Z_PHOTO_STDDEV'
     plot_z_true_vs_pred(predictions, z_photo_col, z_max, z_photo_stddev_col)
-    # Plot Z_B for comparison
-    plot_z_true_vs_pred(predictions, 'Z_B', z_max)
-    # Plot Z_ML for comparison
-    plot_z_true_vs_pred(predictions, 'Z_ML', z_max)
 
 
 def plot_z_true_vs_pred(predictions, z_pred_col, z_max, z_pred_stddev_col=None):
@@ -301,7 +299,7 @@ def precision_z_report(predictions, col_true='CLASS', z_max=None):
 def classification_and_redshift_report(predictions):
     step = 0.02
     thresholds = np.arange(0, 1, step)
-    classes = np.unique(predictions['CLASS'])
+    classes = ['QSO', 'GALAXY']
     color_palette = get_cubehelix_palette(len(classes))
 
     metrics_to_plot = OrderedDict([('MSE', mean_squared_error), ('R2', r2_score),

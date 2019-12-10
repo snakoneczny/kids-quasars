@@ -92,7 +92,7 @@ class AnnClf(BaseEstimator):
         self.params_exp = params
         self.network = None
         self.scaler = MinMaxScaler()
-        self.patience = 800
+        self.patience = 1000
         self.batch_size = 256
         self.lr = 0.0001
         self.dropout_rate = 0.2
@@ -103,7 +103,7 @@ class AnnClf(BaseEstimator):
         elif params['is_inference']:
             self.epochs = 400
         else:
-            self.epochs = 2000
+            self.epochs = 4000
 
         log_name = 'clf, lr={}, bs={}, {}'.format(self.lr, self.batch_size, params['timestamp_start'].replace('_', ' '))
         if params['tag']:
