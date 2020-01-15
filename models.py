@@ -111,7 +111,7 @@ class AnnClf(BaseEstimator):
 
         self.callbacks = []
         if not self.params_exp['is_inference']:
-            self.callbacks.append(EarlyStopping(monitor='val_loss', patience=self.patience, restore_best_weights=True))
+            self.callbacks.append(EarlyStopping(monitor='val_accuracy', patience=self.patience, restore_best_weights=True))
         if not self.params_exp['is_test']:
             self.callbacks.append(CustomTensorBoard(log_folder=log_name, params=self.params_exp,
                                                     is_inference=self.params_exp['is_inference']))
@@ -179,7 +179,7 @@ class AnnReg(BaseEstimator):
         self.params_exp = params
         self.network = None
         self.scaler = MinMaxScaler()
-        self.patience = 2000
+        self.patience = 1000
         self.batch_size = 256
         self.lr = 0.0001
         self.dropout_rate = 0.2
@@ -199,7 +199,7 @@ class AnnReg(BaseEstimator):
             else:
                 self.epochs = 340
         else:
-            self.epochs = 10000
+            self.epochs = 5000
 
         base_name = 'z-{}'.format(params['specialization']).lower() if params['specialization'] else 'z'
         log_name = '{}, lr={}, bs={}, {}'.format(base_name, self.lr, self.batch_size,
