@@ -8,7 +8,7 @@ def get_config(args, is_inference=False):
     cfg = vars(args).copy()
 
     with open(cfg['config_file'], 'r') as config_file:
-        cfg.update(yaml.load(config_file))
+        cfg.update(yaml.full_load(config_file))
 
     cfg['is_inference'] = is_inference
 

@@ -27,17 +27,22 @@ def relative_err_std(y_true, y_pred):
     return e.std()
 
 
-def experiment_report(predictions, preds_z_qso=None, preds_z_galaxy=None, test_subset=None, z_max=None,
-                      col_true='CLASS'):
+def experiment_report(predictions, preds_z_qso=None, preds_z_galaxy=None, test_subset=None, min_clf_proba=None,
+                      z_max=None, col_true='CLASS'):
     np.set_printoptions(precision=4)
 
     predictions = add_kids_columns(predictions)
 
+    if preds_z_qso is not None:
+        predictions = assign_redshift(predictions, preds_z_qso, preds_z_galaxy)
+
     if test_subset:
         mask = predictions['test_subset'] == test_subset
         predictions = predictions.loc[mask]
-        preds_z_qso = preds_z_qso.loc[mask] if preds_z_qso is not None else None
-        preds_z_galaxy = preds_z_galaxy.loc[mask] if preds_z_galaxy is not None else None
+
+    if min_clf_proba:
+        mask = predictions[['QSO_PHOTO', 'GALAXY_PHOTO', 'STAR_PHOTO']].max(axis=1) > min_clf_proba
+        predictions = predictions.loc[mask]
 
     if 'CLASS_PHOTO' in predictions.columns:
         multiclass_report(predictions, col_true=col_true)
@@ -47,8 +52,6 @@ def experiment_report(predictions, preds_z_qso=None, preds_z_galaxy=None, test_s
             completeness_z_report(predictions, col_true=col_true, z_max=z_max)
 
     if (('Z_PHOTO' in predictions.columns) or (preds_z_qso is not None)) and 'Z' in predictions.columns:
-        if preds_z_qso is not None:
-            predictions = assign_redshift(predictions, preds_z_qso, preds_z_galaxy)
         redshift_metrics(predictions)
         redshift_scatter_plots(predictions, z_max)
         # redshift_binned_stats(predictions)

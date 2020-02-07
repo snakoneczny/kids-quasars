@@ -380,22 +380,21 @@ def plot_external_qso_size(data):
 
 
 # TODO: intelligence of feature importance should not be here?
-def plot_feature_ranking(model, features, model_type='rf', importance_type='gain'):
+def plot_feature_ranking(model, features, model_type='rf', importance_type='gain', n_features=15, title=None):
     if model_type == 'rf':
         importances = model.feature_importances_ * 100
         # no std because it's too big
         # std = np.std([tree.feature_importances_ for tree in model.estimators_], axis=0)
-
     elif model_type == 'xgb':
+        model.get_booster().feature_names = features
         importances = model.get_booster().get_score(importance_type=importance_type)
         features = list(importances.keys())
         importances = list(importances.values())
         importances = np.array(importances) / sum(importances) * 100
 
     indices = np.argsort(importances)[::-1]
-    max_features = 40
-    if len(features) > max_features:
-        indices = indices[:max_features]
+    if len(features) > n_features:
+        indices = indices[:n_features]
 
     features_sorted = np.array(features)[indices]
     importances_sorted = np.array(importances)[indices]
@@ -409,10 +408,13 @@ def plot_feature_ranking(model, features, model_type='rf', importance_type='gain
     ax.invert_yaxis()
     ax.set_xlabel('feature importance (%)')
 
+    val_0 = importances_sorted[0]
     for i, value in enumerate(importances_sorted):
-        offset = -5.0 if i == 0 else .35
+        # offset = -3.6 if i == 0 else .3
+        offset = -0.17 * val_0 if i == 0 else .02 * val_0
         color = 'white' if i == 0 else 'black'
         ax.text(value + offset, i + .2, '{:.2f}%'.format(value), color=color)
 
+    plt.title(title)
     plt.tight_layout()
     plt.show()

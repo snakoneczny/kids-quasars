@@ -20,16 +20,24 @@ tfd = tfp.distributions
 
 
 def build_rf_clf(params):
-    n_estimators = 10 if params['is_test'] else 400
+    n_estimators = 10 if params['is_test'] else 500
     return RandomForestClassifier(
-        n_estimators=n_estimators, criterion='gini', random_state=491237, n_jobs=12, verbose=2
+        n_estimators=n_estimators, criterion='gini', random_state=491237, n_jobs=24, verbose=2
     )
 
 
 def build_rf_reg(params):
-    n_estimators = 10 if params['is_test'] else 400
+    if params['is_test']:
+        n_estimators = 10
+    elif params['specialization'] == 'QSO':
+        n_estimators = 2000
+    elif params['specialization'] == 'GALAXY':
+        n_estimators = 400
+    else:  # All classes
+        n_estimators = 1200
+
     return RandomForestRegressor(
-        n_estimators=n_estimators, criterion='mse', random_state=491237, n_jobs=12, verbose=2
+        n_estimators=n_estimators, criterion='mse', random_state=134, n_jobs=24, verbose=2
     )
 
 
@@ -47,7 +55,7 @@ def build_xgb_clf(params):
         n_estimators = 100000
 
     return XGBClassifier(
-        max_depth=7, learning_rate=0.1, gamma=0, min_child_weight=1, colsample_bytree=0.7, subsample=0.8,
+        max_depth=9, learning_rate=0.1, gamma=0, min_child_weight=1, colsample_bytree=0.9, subsample=0.8,
         scale_pos_weight=2, reg_alpha=0, reg_lambda=1, n_estimators=n_estimators, objective='multi:softmax',
         booster='gbtree', max_delta_step=0, colsample_bylevel=1, base_score=0.5, random_state=18235, missing=None,
         verbosity=0, n_jobs=24,
@@ -55,12 +63,11 @@ def build_xgb_clf(params):
 
 
 def build_xgb_reg(params):
-    # TODO: reg:linear is now deprecated in favor of reg:squarederror
     # All classes
     if not params['specialization']:
         return XGBRegressor(
             max_depth=5, learning_rate=0.1, gamma=0, min_child_weight=20, colsample_bytree=0.5, subsample=1,
-            scale_pos_weight=1, reg_alpha=1, reg_lambda=1, n_estimators=100000, objective='reg:linear',
+            scale_pos_weight=1, reg_alpha=1, reg_lambda=1, n_estimators=100000, objective='reg:squarederror',
             booster='gbtree', max_delta_step=0, colsample_bylevel=1, colsample_bynode=1, base_score=0.5,
             random_state=1587, missing=None, importance_type='gain', verbosity=0, n_jobs=24,
         )
@@ -69,7 +76,7 @@ def build_xgb_reg(params):
         # TODO: subsample danger, new random_state?
         return XGBRegressor(
             max_depth=5, learning_rate=0.1, gamma=0, min_child_weight=10, colsample_bytree=0.6, subsample=0.4,
-            scale_pos_weight=1, reg_alpha=0, reg_lambda=1, n_estimators=100000, objective='reg:linear',
+            scale_pos_weight=1, reg_alpha=0, reg_lambda=1, n_estimators=100000, objective='reg:squarederror',
             booster='gbtree', max_delta_step=0, colsample_bylevel=1, colsample_bynode=1, base_score=0.5,
             random_state=1587, missing=None, importance_type='gain', verbosity=0, n_jobs=24,
         )
@@ -77,7 +84,7 @@ def build_xgb_reg(params):
     elif params['specialization'] == 'GALAXY':
         return XGBRegressor(
             max_depth=7, learning_rate=0.1, gamma=0, min_child_weight=20, colsample_bytree=1, subsample=1,
-            scale_pos_weight=1, reg_alpha=0, reg_lambda=2, n_estimators=100000, objective='reg:linear',
+            scale_pos_weight=1, reg_alpha=0, reg_lambda=2, n_estimators=100000, objective='reg:squarederror',
             booster='gbtree', max_delta_step=0, colsample_bylevel=1, colsample_bynode=1, base_score=0.5,
             random_state=1587, missing=None, importance_type='gain', verbosity=0, n_jobs=24,
         )
