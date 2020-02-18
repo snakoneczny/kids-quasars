@@ -1,4 +1,5 @@
 from collections.abc import Iterable
+from os import path
 
 import numpy as np
 import pandas as pd
@@ -13,7 +14,7 @@ from tensorflow.keras.models import Sequential, Model
 from tensorflow.keras.layers import Input, Dense, Dropout
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras import backend as K
-from tensorflow.keras.callbacks import Callback, TensorBoard, EarlyStopping
+from tensorflow.keras.callbacks import Callback, TensorBoard, EarlyStopping, ModelCheckpoint
 from tensorflow.keras.utils import to_categorical
 
 tfd = tfp.distributions
@@ -44,7 +45,7 @@ def build_rf_reg(params):
 def build_xgb_clf(params):
     if params['is_test']:
         n_estimators = 10
-    elif params['is_inference']:
+    elif params['is_inference']:  # Not up-to-date
         if params['features_key'] == 'colors':
             n_estimators = 100
         elif params['features_key'] == 'no-sg':
@@ -104,6 +105,8 @@ class AnnClf(BaseEstimator):
         self.lr = 0.0001
         self.dropout_rate = 0.2
         self.metric_names = ['categorical_crossentropy', 'accuracy']
+        self.model_path = 'outputs/inf_models/{exp_name}_clf__{timestamp}.hdf5'.format(
+            exp_name=params['exp_name'], timestamp=params['timestamp_start'])
 
         if params['is_test']:
             self.epochs = 10
@@ -117,8 +120,13 @@ class AnnClf(BaseEstimator):
             log_name = '{}, {}'.format(params['tag'], log_name)
 
         self.callbacks = []
-        if not self.params_exp['is_inference']:
-            self.callbacks.append(EarlyStopping(monitor='val_accuracy', patience=self.patience, restore_best_weights=True))
+        if self.params_exp['is_inference']:
+            self.callbacks.append(ModelCheckpoint(self.model_path, monitor='val_accuracy', save_best_only=True,
+                                                  save_weights_only=True, verbose=1))
+        else:
+            self.callbacks.append(EarlyStopping(monitor='val_accuracy', patience=self.patience,
+                                                restore_best_weights=True))
+
         if not self.params_exp['is_test']:
             self.callbacks.append(CustomTensorBoard(log_folder=log_name, params=self.params_exp,
                                                     is_inference=self.params_exp['is_inference']))
@@ -173,6 +181,10 @@ class AnnClf(BaseEstimator):
         self.network.fit(X, y, validation_data=validation_data, epochs=self.epochs, batch_size=self.batch_size,
                          callbacks=self.callbacks, verbose=1)
 
+        # Restore best weights if inference
+        if self.params_exp['is_inference']:
+            self.network.load_weights(self.model_path)
+
     def predict(self, X, encoder):
         X = self.scaler.transform(X)
         y_pred_proba = self.network.predict(X)
@@ -191,6 +203,10 @@ class AnnReg(BaseEstimator):
         self.lr = 0.0001
         self.dropout_rate = 0.2
 
+        base_name = 'z-{}'.format(params['specialization']).lower() if params['specialization'] else 'z'
+        self.model_path = 'outputs/inf_models/{exp_name}_{base_name}__{timestamp}.hdf5'.format(
+            exp_name=params['exp_name'], base_name=base_name, timestamp=params['timestamp_start'])
+
         self.metrics_dict = {
             'mean_squared_error': mean_squared_error,
             'mean_absolute_error': mean_absolute_error,
@@ -200,24 +216,27 @@ class AnnReg(BaseEstimator):
             self.epochs = 10
         elif params['is_inference']:
             if params['specialization'] == 'QSO':
-                self.epochs = 320
+                self.epochs = 3000
             elif params['specialization'] == 'GALAXY':
-                self.epochs = 200
+                self.epochs = 1600
             else:
-                self.epochs = 340
+                self.epochs = 1000
         else:
             self.epochs = 5000
 
-        base_name = 'z-{}'.format(params['specialization']).lower() if params['specialization'] else 'z'
         log_name = '{}, lr={}, bs={}, {}'.format(base_name, self.lr, self.batch_size,
                                                  params['timestamp_start'].replace('_', ' '))
         if params['tag']:
             log_name = '{}, {}'.format(params['tag'], log_name)
 
         self.callbacks = []
-        if not (self.params_exp['is_inference'] or self.params_exp['is_test']):
+        if self.params_exp['is_inference']:
+            self.callbacks.append(ModelCheckpoint(self.model_path, monitor='val_loss', save_best_only=True,
+                                                  save_weights_only=True, verbose=1))
+        else:
             self.callbacks.append(EarlyStopping(monitor='val_loss', patience=self.patience,
                                                 restore_best_weights=True))
+        if not self.params_exp['is_test']:
             self.callbacks.append(CustomTensorBoard(log_folder=log_name, params=self.params_exp,
                                                     is_inference=self.params_exp['is_inference']))
 
@@ -276,6 +295,10 @@ class AnnReg(BaseEstimator):
         self.network = self.__create_network(self.params_exp)
         self.network.fit(X, y, validation_data=validation_data, epochs=self.epochs, batch_size=self.batch_size,
                          callbacks=self.callbacks, verbose=1)
+
+        # Restore best weights if inference
+        if self.params_exp['is_inference']:
+            self.network.load_weights(self.model_path)
 
     def predict(self, X, encoder=None, scale_data=True):
         X_to_pred = self.scaler.transform(X) if scale_data else X

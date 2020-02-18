@@ -2,7 +2,7 @@ train_data: KiDS.DR4.x.SDSS.DR14
 
 inference_data: KiDS.DR4.cols
 
-model: xgb
+model: ann
 
 pred_class: True
 

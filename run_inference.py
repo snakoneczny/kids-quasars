@@ -4,12 +4,14 @@ from os import path
 import numpy as np
 import pandas as pd
 from sklearn.preprocessing import LabelEncoder
+from sklearn.model_selection import train_test_split
 
 from config_parser import get_config
 from env_config import DATA_PATH
 from utils import logger, save_catalog
-from data import process_kids
-from models import get_model, build_outputs, get_single_problem_predictions
+from data import COLUMNS_KIDS_ALL, COLUMNS_SDSS, process_kids
+from models import get_model, build_outputs, get_single_problem_predictions,\
+    build_ann_validation_data, build_xgb_validation_data
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-c', '--config', dest='config_file', required=True, help='config file name')
@@ -29,7 +31,15 @@ data_path_pred = path.join(DATA_PATH, 'KiDS/DR4/{inference_data}.fits'.format(in
 
 # Read train data
 logger.info('Reading train data..')
-train_data = process_kids(data_path_train, bands=cfg['bands'], cut=cfg['cut'], sdss_cleaning=True)
+train_data = process_kids(data_path_train, columns=COLUMNS_KIDS_ALL+COLUMNS_SDSS, bands=cfg['bands'], cut=cfg['cut'],
+                          sdss_cleaning=True)
+
+# Limit train data to a given class in case of redshift prediction
+# TODO: check if works properly
+if cfg['specialization']:
+    mask = (train_data['CLASS'] == cfg['specialization'])
+    train_data = train_data.loc[mask]
+    print(train_data['CLASS'])
 
 X = train_data[cfg['features']].values
 y = train_data['CLASS'].values
@@ -44,20 +54,30 @@ y_encoded = encoder.transform(y)
 classes = np.unique(y)
 logger.info('Available classes: {}'.format(np.unique(y, return_counts=True)))
 
-# Limit train data to a given class in case of redshift prediction
-if cfg['specialization']:
-    mask = (y == cfg['specialization'])
-    X, y, z = X[mask], y[mask], z[mask]
+# Train test split
+X_train, X_test, y_train, y_test, z_train, z_test, idx_train, idx_test = train_test_split(
+        X, y_encoded, z, train_data.index, test_size=0.1, random_state=427)
+
+# Create all the train parameters
+# TODO: refactor, the same in run_experiment, build_validation_data function
+true_outputs = build_outputs(y_train, z_train, cfg)
+train_params = {}
+if cfg['model'] == 'ann':
+    test_names = ['random']
+    train_params['validation_data_arr'] = build_ann_validation_data([X_test], [y_test], [z_test], test_names, cfg)
+elif cfg['model'] == 'xgb':
+    train_params['eval_set'] = build_xgb_validation_data([X_test], [y_test], [z_test], cfg)
 
 # Train the model
 logger.info('Training model..')
 model = get_model(cfg)
-true_outputs = build_outputs(y, z, cfg)
-model.fit(X, true_outputs)
+true_outputs = build_outputs(y_train, z_train, cfg)
+model.fit(X_train, true_outputs, **train_params)
 
 # Read inference data
 logger.info('Reading inference data..')
-data = process_kids(data_path_pred, bands=cfg['bands'], cut=cfg['cut'], sdss_cleaning=False, n=n_rows)
+data = process_kids(data_path_pred, columns=COLUMNS_KIDS_ALL, bands=cfg['bands'], cut=cfg['cut'], sdss_cleaning=False,
+                    n=n_rows)
 X = data[cfg['features']].values
 
 # Predict on the inference data

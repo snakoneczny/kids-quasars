@@ -2,11 +2,11 @@ train_data: KiDS.DR4.x.SDSS.DR14
 
 inference_data: KiDS.DR4.cols
 
-model: xgb
+model: ann
 
-pred_class: False
+pred_class: True
 
-pred_z: True
+pred_z: False
 
 specialization:
 
