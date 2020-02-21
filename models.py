@@ -105,7 +105,7 @@ class AnnClf(BaseEstimator):
         self.lr = 0.0001
         self.dropout_rate = 0.2
         self.metric_names = ['categorical_crossentropy', 'accuracy']
-        self.model_path = 'outputs/inf_models/{exp_name}_clf__{timestamp}.hdf5'.format(
+        self.model_path = 'outputs/inf_models/{exp_name}__{timestamp}.hdf5'.format(
             exp_name=params['exp_name'], timestamp=params['timestamp_start'])
 
         if params['is_test']:
@@ -121,17 +121,17 @@ class AnnClf(BaseEstimator):
 
         self.callbacks = []
         if self.params_exp['is_inference']:
-            self.callbacks.append(ModelCheckpoint(self.model_path, monitor='val_accuracy', save_best_only=True,
-                                                  save_weights_only=True, verbose=1))
+            self.callbacks.append(ModelCheckpoint(self.model_path, monitor='val_categorical_crossentropy',
+                                                  save_best_only=True, save_weights_only=True, verbose=1))
         else:
-            self.callbacks.append(EarlyStopping(monitor='val_accuracy', patience=self.patience,
+            self.callbacks.append(EarlyStopping(monitor='val_categorical_crossentropy', patience=self.patience,
                                                 restore_best_weights=True))
 
         if not self.params_exp['is_test']:
             self.callbacks.append(CustomTensorBoard(log_folder=log_name, params=self.params_exp,
                                                     is_inference=self.params_exp['is_inference']))
 
-    def __create_network(self, params):
+    def create_network(self, params):
         model = Sequential()
         model.add(Dense(100, input_dim=params['n_features'], activation='relu'))
         model.add(Dropout(self.dropout_rate))
@@ -177,7 +177,7 @@ class AnnClf(BaseEstimator):
         else:
             validation_data = None
 
-        self.network = self.__create_network(self.params_exp)
+        self.network = self.create_network(self.params_exp)
         self.network.fit(X, y, validation_data=validation_data, epochs=self.epochs, batch_size=self.batch_size,
                          callbacks=self.callbacks, verbose=1)
 
@@ -185,7 +185,7 @@ class AnnClf(BaseEstimator):
         if self.params_exp['is_inference']:
             self.network.load_weights(self.model_path)
 
-    def predict(self, X, encoder):
+    def predict(self, X, encoder, batch_size=None):
         X = self.scaler.transform(X)
         y_pred_proba = self.network.predict(X)
         predictions_df = decode_clf_preds(y_pred_proba, encoder)
@@ -203,9 +203,8 @@ class AnnReg(BaseEstimator):
         self.lr = 0.0001
         self.dropout_rate = 0.2
 
-        base_name = 'z-{}'.format(params['specialization']).lower() if params['specialization'] else 'z'
-        self.model_path = 'outputs/inf_models/{exp_name}_{base_name}__{timestamp}.hdf5'.format(
-            exp_name=params['exp_name'], base_name=base_name, timestamp=params['timestamp_start'])
+        self.model_path = 'outputs/inf_models/{exp_name}__{timestamp}.hdf5'.format(
+            exp_name=params['exp_name'], timestamp=params['timestamp_start'])
 
         self.metrics_dict = {
             'mean_squared_error': mean_squared_error,
@@ -224,6 +223,7 @@ class AnnReg(BaseEstimator):
         else:
             self.epochs = 5000
 
+        base_name = 'z-{}'.format(params['specialization']).lower() if params['specialization'] else 'z'
         log_name = '{}, lr={}, bs={}, {}'.format(base_name, self.lr, self.batch_size,
                                                  params['timestamp_start'].replace('_', ' '))
         if params['tag']:
@@ -240,7 +240,7 @@ class AnnReg(BaseEstimator):
             self.callbacks.append(CustomTensorBoard(log_folder=log_name, params=self.params_exp,
                                                     is_inference=self.params_exp['is_inference']))
 
-    def __create_network(self, params):
+    def create_network(self, params):
         model = Sequential()
         model.add(Dense(100, input_dim=params['n_features'], activation='relu'))
         model.add(Dropout(self.dropout_rate))
@@ -292,7 +292,7 @@ class AnnReg(BaseEstimator):
         else:
             validation_data = None
 
-        self.network = self.__create_network(self.params_exp)
+        self.network = self.create_network(self.params_exp)
         self.network.fit(X, y, validation_data=validation_data, epochs=self.epochs, batch_size=self.batch_size,
                          callbacks=self.callbacks, verbose=1)
 
@@ -300,12 +300,20 @@ class AnnReg(BaseEstimator):
         if self.params_exp['is_inference']:
             self.network.load_weights(self.model_path)
 
-    def predict(self, X, encoder=None, scale_data=True):
+    def predict(self, X, encoder=None, batch_size=None, scale_data=True):
         X_to_pred = self.scaler.transform(X) if scale_data else X
         predictions_df = pd.DataFrame()
-        preds = self.network(X_to_pred)
-        predictions_df['Z_PHOTO'] = preds.mean()[:, 0]
-        predictions_df['Z_PHOTO_STDDEV'] = preds.stddev()[:, 0]
+
+        if batch_size:
+            indices = [(i + 1) * batch_size for i in range(int(X_to_pred.shape[0] / batch_size))]
+            batches = np.split(X_to_pred, indices, axis=0)
+            preds_arr = [self.network(batch) for batch in batches]
+        else:
+            raise(ValueError('Regression network requires batch size in prediction'))
+
+        predictions_df['Z_PHOTO'] = np.concatenate([preds.mean() for preds in preds_arr])[:, 0]
+        predictions_df['Z_PHOTO_STDDEV'] = np.concatenate([preds.stddev() for preds in preds_arr])[:, 0]
+
         return predictions_df
 
 
@@ -394,42 +402,16 @@ class CustomTensorBoard(TensorBoard):
         super().__init__(log_dir=log_dir, profile_batch=0)
 
         self.params_exp = params
-        self.main_test_name = 'top' if params['test_method'] == 'magnitude' else 'random'
+        self.main_test_name = 'top' if (
+                    params['test_method'] == 'magnitude' and not params['is_inference']) else 'random'
 
     def on_epoch_end(self, epoch, logs=None):
         logs_to_send = logs.copy()
 
         # Add learning rate
-        logs_to_send.update({'learning rate': K.eval(self.model.optimizer.lr)})
+        logs_to_send.update({'learning_rate': K.eval(self.model.optimizer.lr)})
 
-        # Remove losses tracked for gradient descent
-        # to_pop = []  # ['loss', 'random_loss']
-        # if self.params_exp['pred_class'] and self.params_exp['pred_z']:
-        #     to_pop += [
-        #         # Losses are not needed as we track all metrics with their proper names
-        #         'category_loss',
-        #         'redshift_loss',
-        #         # Below metrics are artificially created due to metrics tracking
-        #         'redshift_categorical_crossentropy',
-        #         'redshift_acc',
-        #         # The same for category
-        #         'category_mean_squared_error',
-        #         'category_mean_absolute_error',
-        #     ]
-        # for str in to_pop:
-        #     logs_to_send.pop(str, None)
-        #     logs_to_send.pop('{}_{}'.format(self.main_test_name, str), None)
-
-        # Standalone problems, add category or redshift to metric names
-        # if not (self.params_exp['pred_class'] and self.params_exp['pred_z']):
-        #     metrics = ['categorical_crossentropy', 'acc'] if self.params_exp['pred_class'] \
-        #         else ['mean_squared_error', 'mean_absolute_error']
-        #     for metric in metrics:
-        #         logs_to_send['train_{}'.format(metric)] = logs_to_send.pop('{}'.format(metric))
-        #         logs_to_send['{}_{}'.format(self.main_test_name, metric)] = logs_to_send.pop(
-        #             'val_{}'.format(metric))
-        # TODO: add to alll metrics exp name: t = 'category' if self.params_exp['pred_class'] else 'redshift'
-
+        # TODO: if regression and negloglik copy val_loss to val_negloglik, hard to find better place
         # Check if additional random validation sets present and put val_random on the same plot with train
         if any([log_name.startswith('val_random') for log_name in logs_to_send]):
             for key in list(logs_to_send):
@@ -442,6 +424,13 @@ class CustomTensorBoard(TensorBoard):
                         logs_to_send[key_2] = logs_to_send[key_1]
                     # Move random score in order to plot with training scores
                     logs_to_send[key_1] = logs_to_send[key]
+        else:
+            # No random losses from additional validation sets, in case of inference and classification
+            for key in list(logs_to_send):
+                if key.startswith('val'):
+                    # Move loss used in training to it's proper name if not already done in validation
+                    key_main = key.replace('val', 'val_' + self.main_test_name)
+                    logs_to_send[key_main] = logs_to_send[key]
 
         super().on_epoch_end(epoch, logs_to_send)
 

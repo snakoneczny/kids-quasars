@@ -29,8 +29,15 @@ def get_config(args, is_inference=False):
 
 
 def add_experiment_name(cfg):
-    cfg['exp_name'] = '{model}_f-{features}'.format(
-        model=cfg['model'], features=cfg['features_key'])
+    if cfg['pred_class'] and cfg['pred_z']:
+        problem = 'clf-z'
+    elif cfg['pred_class']:
+        problem = 'clf'
+    else:
+        problem = 'z'
+
+    cfg['exp_name'] = '{model}_{problem}_f-{features}'.format(
+        model=cfg['model'], problem=problem, features=cfg['features_key'])
 
     if not cfg['is_inference']:
         cfg['exp_name'] += '_test-{test}'.format(test=cfg['test_method'])

@@ -15,6 +15,7 @@ from models import get_model, build_outputs, get_single_problem_predictions,\
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-c', '--config', dest='config_file', required=True, help='config file name')
+parser.add_argument('-r', '--read', dest='read', action='store_true', help='flag to read weights instead of training')
 parser.add_argument('-s', '--save', dest='save', action='store_true', help='flag for catalog saving')
 parser.add_argument('-t', '--tag', dest='tag', help='catalog tag, added to logs name')
 parser.add_argument('--test', dest='is_test', action='store_true', help='indicate test run')
@@ -22,8 +23,16 @@ args = parser.parse_args()
 
 cfg = get_config(args, is_inference=True)
 
+# TODO: define weights for network, no training
+if cfg['pred_class']:
+    weights_path = 'outputs/inf_models/KiDS_DR4_x_SDSS_DR14_ann_f-all_clf__2020-02-19_13:22:23.hdf5'
+    batch_size = None
+else:
+    weights_path = 'outputs/inf_models/KiDS_DR4_x_SDSS_DR14_ann_z_f-all_spec-qso__2020-02-19_15:09:11.hdf5'
+    batch_size = 1024
+
 # Limit rows to read from data in case of a test run
-n_rows = 1000 if cfg['is_test'] else None
+n_rows = 4000 if cfg['is_test'] else None
 
 # Define data paths
 data_path_train = path.join(DATA_PATH, 'KiDS/DR4/{train_data}.fits'.format(train_data=cfg['train_data']))
@@ -39,7 +48,6 @@ train_data = process_kids(data_path_train, columns=COLUMNS_KIDS_ALL+COLUMNS_SDSS
 if cfg['specialization']:
     mask = (train_data['CLASS'] == cfg['specialization'])
     train_data = train_data.loc[mask]
-    print(train_data['CLASS'])
 
 X = train_data[cfg['features']].values
 y = train_data['CLASS'].values
@@ -58,21 +66,29 @@ logger.info('Available classes: {}'.format(np.unique(y, return_counts=True)))
 X_train, X_test, y_train, y_test, z_train, z_test, idx_train, idx_test = train_test_split(
         X, y_encoded, z, train_data.index, test_size=0.1, random_state=427)
 
-# Create all the train parameters
-# TODO: refactor, the same in run_experiment, build_validation_data function
-true_outputs = build_outputs(y_train, z_train, cfg)
-train_params = {}
-if cfg['model'] == 'ann':
-    test_names = ['random']
-    train_params['validation_data_arr'] = build_ann_validation_data([X_test], [y_test], [z_test], test_names, cfg)
-elif cfg['model'] == 'xgb':
-    train_params['eval_set'] = build_xgb_validation_data([X_test], [y_test], [z_test], cfg)
-
-# Train the model
-logger.info('Training model..')
 model = get_model(cfg)
-true_outputs = build_outputs(y_train, z_train, cfg)
-model.fit(X_train, true_outputs, **train_params)
+if args.read:
+    # Read already trained weights
+    # TODO: save scaler and weights, save the whole pipeline?
+    logger.info('Loading weights..')
+    model.scaler.fit_transform(X_train)
+    model.network = model.create_network(model.params_exp)
+    model.network.load_weights(weights_path)
+
+else:
+    # Create all the train parameters
+    # TODO: refactor, the same in run_experiment, build_validation_data function
+    train_params = {}
+    if cfg['model'] == 'ann':
+        test_names = ['random']
+        train_params['validation_data_arr'] = build_ann_validation_data([X_test], [y_test], [z_test], test_names, cfg)
+    elif cfg['model'] == 'xgb':
+        train_params['eval_set'] = build_xgb_validation_data([X_test], [y_test], [z_test], cfg)
+
+    # Train the model
+    logger.info('Training model..')
+    true_outputs = build_outputs(y_train, z_train, cfg)
+    model.fit(X_train, true_outputs, **train_params)
 
 # Read inference data
 logger.info('Reading inference data..')
@@ -83,7 +99,8 @@ X = data[cfg['features']].values
 # Predict on the inference data
 logger.info('Predicting..')
 if cfg['model'] == 'ann':
-    preds = model.predict(X, encoder)
+    # TODO: batch size
+    preds = model.predict(X, encoder, batch_size=batch_size)
 else:
     preds = get_single_problem_predictions(model, X, encoder, cfg)
 

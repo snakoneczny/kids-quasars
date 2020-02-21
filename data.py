@@ -386,10 +386,11 @@ def process_2df(data):
     return data
 
 
-def merge_specialized_catalogs(ctlg_clf, ctlg_z_qso, ctlg_z_galaxy):
+def merge_specialized_catalogs(ctlg_clf, ctlg_z_qso, ctlg_z_galaxy=None):
     catalog = ctlg_clf.copy()
     catalog.loc[catalog['CLASS_PHOTO'] == 'QSO', 'Z_PHOTO'] = ctlg_z_qso.loc[catalog['CLASS_PHOTO'] == 'QSO', 'Z_PHOTO']
-    catalog.loc[catalog['CLASS_PHOTO'] == 'GALAXY', 'Z_PHOTO'] = ctlg_z_galaxy.loc[
-        catalog['CLASS_PHOTO'] == 'GALAXY', 'Z_PHOTO']
+    if ctlg_z_galaxy:
+        catalog.loc[catalog['CLASS_PHOTO'] == 'GALAXY', 'Z_PHOTO'] = ctlg_z_galaxy.loc[
+            catalog['CLASS_PHOTO'] == 'GALAXY', 'Z_PHOTO']
     catalog.loc[catalog['CLASS_PHOTO'] == 'STAR', 'Z_PHOTO'] = 0
     return catalog

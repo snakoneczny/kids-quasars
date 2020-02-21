@@ -231,6 +231,7 @@ def plot_z_true_vs_pred(predictions, z_pred_col, z_max, z_pred_stddev_col=None):
 
         plt.figure()
         ax = sns.kdeplot(preds_c['Z'], preds_c[z_pred_col], shade=True)
+        ax.collections[0].set_alpha(0)
         plt.plot(range(z_max[c] + 1))
         ax.set(xlim=(0, z_max[c]), ylim=(0, z_max[c]))
         plt.xlabel(get_plot_text('Z'))
@@ -303,121 +304,95 @@ def classification_and_redshift_report(predictions):
     step = 0.02
     thresholds = np.arange(0, 1, step)
     classes = ['QSO', 'GALAXY']
-    color_palette = get_cubehelix_palette(len(classes))
+    for cls in classes:
+        preds_class = predictions.loc[predictions['CLASS_PHOTO'] == cls]
 
-    metrics_to_plot = OrderedDict([('MSE', mean_squared_error), ('R2', r2_score),
-                                   ('rel. error', relative_err_mean), ('rel. err. std.', relative_err_std)])
-    for metric_name, metric_func in metrics_to_plot.items():
-        plt.figure()
+        metrics_to_plot_arr = [
+            [('rel. error', relative_err_mean), ('R2', r2_score)],
+            [('rel. error', relative_err_mean), ('rel. err. std.', relative_err_std)],
+        ]
+        for metrics_to_plot in metrics_to_plot_arr:
 
-        for i, cls in enumerate(classes):
-            preds_class = predictions.loc[predictions['CLASS_PHOTO'] == cls]
-            label = get_plot_text(cls, is_photo=True)
+            fig, ax1 = plt.subplots()
+            ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
+            ax1.set_xlabel('minimum classification probability')
+            ax_arr = [ax1, ax2]
 
-            # Get scores limited by classification probability thresholds
-            metric_values = []
-            for thr in thresholds:
-                preds_lim = preds_class.loc[preds_class['{}_PHOTO'.format(cls)] >= thr]
-                metric_values.append(np.around(metric_func(preds_lim['Z'], preds_lim['Z_PHOTO']), 4))
+            plotted_arr = []
+            color_palette = get_cubehelix_palette(len(metrics_to_plot))
+            for i, (metric_name, metric_func) in enumerate(metrics_to_plot):
+                label = get_plot_text(cls, is_photo=True)
 
-            plt.plot(thresholds, metric_values, label=label, color=color_palette[i],
-                     linestyle=get_line_style(i))
+                # Get scores limited by classification probability thresholds
+                metric_values = []
+                for thr in thresholds:
+                    preds_lim = preds_class.loc[preds_class['{}_PHOTO'.format(cls)] >= thr]
+                    metric_values.append(np.around(metric_func(preds_lim['Z'], preds_lim['Z_PHOTO']), 4))
 
-        plt.xlabel('minimum classification probability')
-        plt.ylabel(metric_name)
-        ax = plt.axes()
-        ax.yaxis.grid(True)
-        plt.legend()
-        plt.show()
+                plotted, = ax_arr[i].plot(thresholds, metric_values, label=metric_name, color=color_palette[i],
+                                          linestyle=get_line_style(i))
+                ax_arr[i].tick_params(axis='y', labelcolor=color_palette[i])
+                ax_arr[i].set_ylabel(metric_name)
+                plotted_arr.append(plotted)
 
-    plot_proba_against_size(predictions.loc[predictions['CLASS_PHOTO'] == 'QSO'], column='QSO_PHOTO', x_lim=(0.3, 1))
+            ax_arr[0].yaxis.grid(True)
+            fig.tight_layout()  # otherwise the right y-label is slightly clipped
+            plt.legend(handles=plotted_arr, loc='upper right')
+            plt.show()
+
+        plot_proba_against_size(predictions.loc[predictions['CLASS_PHOTO'] == cls], column='{}_PHOTO'.format(cls),
+                                x_lim=(0.3, 1))
 
 
 def redshift_uncertainity_cleaning_report(predictions):
     step = 0.02
     classes = ['QSO', 'GALAXY']
-    color_palette = get_cubehelix_palette(len(classes))
+    for cls in classes:
+        preds_class = predictions.loc[predictions['CLASS_PHOTO'] == cls]
+        thresholds = np.flip(np.arange(preds_class['Z_PHOTO'].min() + step, 1 + step, step))
 
-    metrics_to_plot = OrderedDict([('MSE', mean_squared_error), ('R2', r2_score),
-                                   ('rel. error', relative_err_mean), ('rel. err. std.', relative_err_std)])
-    for metric_name, metric_func in metrics_to_plot.items():
-        plt.figure()
+        metrics_to_plot_arr = [
+            [('rel. error', relative_err_mean), ('R2', r2_score)],
+            [('rel. error', relative_err_mean), ('rel. err. std.', relative_err_std)],
+        ]
+        for metrics_to_plot in metrics_to_plot_arr:
 
-        for i, cls in enumerate(classes):
-            preds_class = predictions.loc[predictions['CLASS_PHOTO'] == cls]
-            thresholds = np.flip(np.arange(preds_class['Z_PHOTO'].min() + step, 1 + step, step))
-            label = get_plot_text(cls, is_photo=True)
+            fig, ax1 = plt.subplots()
+            ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
+            ax1.set_xlabel('maximum $z_{photo}$ std. dev. - uncertainty')
+            ax_arr = [ax1, ax2]
 
-            # Get scores limited by classification probability thresholds
-            metric_values = []
-            for thr in thresholds:
-                preds_lim = preds_class.loc[preds_class['Z_PHOTO_STDDEV'] <= thr]
-                metric_values.append(np.around(metric_func(preds_lim['Z'], preds_lim['Z_PHOTO']), 4))
+            plotted_arr = []
+            color_palette = get_cubehelix_palette(len(metrics_to_plot))
+            for i, (metric_name, metric_func) in enumerate(metrics_to_plot):
+                label = get_plot_text(cls, is_photo=True)
 
-            plt.plot(thresholds, metric_values, label=label, color=color_palette[i],
-                     linestyle=get_line_style(i))
-            plt.xlabel('maximum $z_{photo}$ std. dev. - uncertainty')
-            plt.ylabel(metric_name)
-            ax = plt.axes()
-            ax.yaxis.grid(True)
+                # Get scores limited by classification probability thresholds
+                metric_values = []
+                for thr in thresholds:
+                    preds_lim = preds_class.loc[preds_class['Z_PHOTO_STDDEV'] <= thr]
+                    metric_values.append(np.around(metric_func(preds_lim['Z'], preds_lim['Z_PHOTO']), 4))
 
-        plt.legend()
+                plotted, = ax_arr[i].plot(thresholds, metric_values, label=metric_name, color=color_palette[i],
+                                          linestyle=get_line_style(i))
+                ax_arr[i].tick_params(axis='y', labelcolor=color_palette[i])
+                ax_arr[i].set_ylabel(metric_name)
+                plotted_arr.append(plotted)
+
+            ax_arr[0].yaxis.grid(True)
+            fig.tight_layout()  # otherwise the right y-label is slightly clipped
+            plt.legend(handles=plotted_arr, loc='upper right')
+            plt.show()
+
+        # TODO: add galaxies
+        # Size plot
+        preds_qso = predictions.loc[predictions['CLASS_PHOTO'] == 'QSO']
+        thresholds = np.flip(np.arange(preds_qso['Z_PHOTO'].min() + step, 1 + step, step))
+        data_size_arr = [preds_qso.loc[preds_qso['Z_PHOTO_STDDEV'] <= thr].shape[0] for thr in thresholds]
+        plt.plot(thresholds, data_size_arr)
+        plt.xlabel('maximum $z_{photo}$ std. dev. - uncertainty')
+        plt.ylabel('{} size'.format(get_plot_text('QSO', is_photo=True)))
         plt.show()
-
-    # TODO: add galaxies?
-    # Size plot
-    preds_qso = predictions.loc[predictions['CLASS_PHOTO'] == 'QSO']
-    thresholds = np.flip(np.arange(preds_qso['Z_PHOTO'].min() + step, 1 + step, step))
-    data_size_arr = [preds_qso.loc[preds_qso['Z_PHOTO_STDDEV'] <= thr].shape[0] for thr in thresholds]
-    plt.plot(thresholds, data_size_arr)
-    plt.xlabel('maximum $z_{photo}$ std. dev. - uncertainty')
-    plt.ylabel('{} size'.format(get_plot_text('QSO', is_photo=True)))
-    plt.show()
-
-
-# TODO: has to be limited to narrow redshift range
-# def redshift_binned_stats(predictions):
-#     # Get bins
-#     classes = np.unique(predictions['CLASS'])
-#     redshifts_per_class_dict = {}
-#     for cls in classes:
-#         redshifts_per_class_dict[cls] = predictions.loc[predictions['CLASS'] == cls]['Z']
-#     _, bin_edges = np.histogram(np.hstack(
-#         (redshifts_per_class_dict['QSO'],
-#          redshifts_per_class_dict['STAR'],
-#          redshifts_per_class_dict['GALAXY'])),
-#         bins=40)
-#     predictions.loc[:, 'binned'] = pd.cut(predictions['Z'], bin_edges)
-#
-#     # Define metrics to apply on bins
-#     relative_err_str = r'$\frac{z_{photo} - z_{spec}}{1 + z_{spec}}$'
-#     score_funcs = [
-#         (relative_err_mean, relative_err_str + ' mean'),
-#         (relative_err_std, relative_err_str + ' std'),
-#         # TODO: make work for empty arrays, or remove empty array by cutting classes  independently
-#         # (r2_score, 'R2 score'),
-#     ]
-#
-#     # Get scores in bins
-#     score_dict = defaultdict(dict)
-#     for i, cls in enumerate(classes):
-#         preds_class = predictions.loc[predictions['CLASS'] == cls]
-#         grouped = preds_class.groupby(by='binned')
-#         for score_func, score_name in score_funcs:
-#             score_dict[score_name][cls] = grouped.apply(lambda frame: score_func(frame['Z'], frame['Z_PHOTO']))
-#
-#     # Plot errors in bins of predicted redshift
-#     color_palette = get_cubehelix_palette(len(classes))
-#     for _, score_name in score_funcs:
-#         x_dict = score_dict[score_name]
-#         plt.figure()
-#         for i, cls in enumerate(classes):
-#             ax = sns.lineplot(bin_edges[:-1], x_dict[cls], drawstyle='steps-pre', label=cls, color=color_palette[i])
-#             ax.lines[i].set_linestyle(get_line_style(i))
-#         plt.xlabel('redshift')
-#         plt.ylabel(score_name)
-#         plt.legend()
-#         plt.show()
 
 
 def metric_class_split(y_true, y_pred, classes, metric):
