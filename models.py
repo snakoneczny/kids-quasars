@@ -10,8 +10,8 @@ from sklearn.metrics import mean_squared_error, mean_absolute_error
 from xgboost import XGBClassifier, XGBRegressor
 import tensorflow as tf
 import tensorflow_probability as tfp
-from tensorflow.keras.models import Sequential, Model
-from tensorflow.keras.layers import Input, Dense, Dropout
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense, Dropout
 from tensorflow.keras.optimizers import Adam
 from tensorflow.keras import backend as K
 from tensorflow.keras.callbacks import Callback, TensorBoard, EarlyStopping, ModelCheckpoint
@@ -128,6 +128,7 @@ class AnnClf(BaseEstimator):
                                                 restore_best_weights=True))
 
         if not self.params_exp['is_test']:
+            pass
             self.callbacks.append(CustomTensorBoard(log_folder=log_name, params=self.params_exp,
                                                     is_inference=self.params_exp['is_inference']))
 

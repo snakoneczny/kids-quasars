@@ -44,6 +44,8 @@ PLOT_TEXTS = {
     'Z_PHOTO_STDDEV_WSPEC': r'$z_{photo}$ std. dev.',
     'Z_B': r'$z_{B}$',
     'Z_ML': r'$Z_{ML}$',
+    'z_err_mean': r'mean $\frac{z_{photo} - z_{spec}}{1 + z_{spec}}$',
+    'z_err_std': r'std. dev. $\frac{z_{photo} - z_{spec}}{1 + z_{spec}}$',
 }
 
 
