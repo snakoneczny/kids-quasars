@@ -1,5 +1,6 @@
 import os
 import random
+from collections import OrderedDict
 
 import pandas as pd
 from astropy.table import Table
@@ -388,9 +389,59 @@ def process_2df(data):
 
 def merge_specialized_catalogs(ctlg_clf, ctlg_z_qso, ctlg_z_galaxy=None):
     catalog = ctlg_clf.copy()
+
+    # QSO
     catalog.loc[catalog['CLASS_PHOTO'] == 'QSO', 'Z_PHOTO'] = ctlg_z_qso.loc[catalog['CLASS_PHOTO'] == 'QSO', 'Z_PHOTO']
+    if 'Z_PHOTO_STDDEV' in ctlg_z_qso:
+        catalog.loc[catalog['CLASS_PHOTO'] == 'QSO', 'Z_PHOTO_STDDEV'] = ctlg_z_qso.loc[
+            catalog['CLASS_PHOTO'] == 'QSO', 'Z_PHOTO_STDDEV']
+
+    # Galaxy
     if ctlg_z_galaxy:
         catalog.loc[catalog['CLASS_PHOTO'] == 'GALAXY', 'Z_PHOTO'] = ctlg_z_galaxy.loc[
             catalog['CLASS_PHOTO'] == 'GALAXY', 'Z_PHOTO']
+        if 'Z_PHOTO_STDDEV' in ctlg_z_galaxy:
+            catalog.loc[catalog['CLASS_PHOTO'] == 'GALAXY', 'Z_PHOTO_STDDEV'] = ctlg_z_galaxy.loc[
+                catalog['CLASS_PHOTO'] == 'GALAXY', 'Z_PHOTO_STDDEV']
+
+    # Star
     catalog.loc[catalog['CLASS_PHOTO'] == 'STAR', 'Z_PHOTO'] = 0
+    catalog.loc[catalog['CLASS_PHOTO'] == 'STAR', 'Z_PHOTO_STDDEV'] = 0
+
     return catalog
+
+
+def add_subset_info(kids, extra_info=False):
+    cs_safe_idx = (kids['CLASS_STAR'] > 0.8) | (kids['CLASS_STAR'] < 0.2)
+    if extra_info:
+        subsets_idx = [
+            ('extrapolation, r > 23', cs_safe_idx & (kids['MAG_GAAP_r'] > 23)),
+            ('extrapolation, r <= 23', cs_safe_idx & (kids['MAG_GAAP_r'] <= 23)),
+            ('safe', cs_safe_idx & (kids['MAG_GAAP_r'] < 22)),
+        ]
+    else:
+        subsets_idx = [
+            ('extrapolation', cs_safe_idx),
+            ('safe', cs_safe_idx & (kids['MAG_GAAP_r'] < 22)),
+        ]
+    kids['subset'] = 'unsafe'
+    for subset_name, subset_idx in subsets_idx:
+        kids.loc[subset_idx, 'subset'] = subset_name
+    return kids
+
+
+def get_inference_subsets(kids):
+    kids = add_subset_info(kids)
+    subsets = OrderedDict([
+        ('KiDS', kids),
+        ('KiDS extrapolation', kids.loc[kids['subset'].isin(['safe', 'extrapolation'])]),
+        ('KiDS safe', kids.loc[kids['subset'] == 'safe']),
+    ])
+    return subsets
+
+
+def get_disjoint_inference_subsets(kids):
+    kids = add_subset_info(kids)
+    subsets = OrderedDict(
+        [(subset_name, kids.loc[kids['subset'] == subset_name]) for subset_name in ['unsafe', 'extrapolation', 'safe']])
+    return subsets

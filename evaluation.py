@@ -14,7 +14,7 @@ from data import DATA_PATH, EXTERNAL_QSO, BASE_CLASSES, BAND_COLUMNS, get_mag_st
     read_fits_to_pandas
 from utils import assign_redshift, pretty_print_magnitude, get_column_desc, get_map
 from plotting import PLOT_TEXTS, plot_confusion_matrix, plot_roc_curve, plot_precision_recall_curve, get_line_style, \
-    get_cubehelix_palette, plot_proba_histograms, plot_proba_against_size, get_plot_text
+    get_cubehelix_palette, plot_proba_histograms, get_plot_text
 
 
 def relative_err_mean(y_true, y_pred):
@@ -25,6 +25,10 @@ def relative_err_mean(y_true, y_pred):
 def relative_err_std(y_true, y_pred):
     e = (y_pred - y_true) / (1 + y_true)
     return e.std()
+
+
+def my_size(y_true, y_pred):
+    return len(y_true)
 
 
 def experiment_report(predictions, preds_z_qso=None, preds_z_galaxy=None, test_subset=None, min_clf_proba=None,
@@ -301,14 +305,15 @@ def precision_z_report(predictions, col_true='CLASS', z_max=None):
 
 
 def classification_and_redshift_report(predictions):
-    step = 0.02
+    step = 0.01
     thresholds = np.arange(0, 1, step)
     classes = ['QSO', 'GALAXY']
     for cls in classes:
         preds_class = predictions.loc[predictions['CLASS_PHOTO'] == cls]
 
         metrics_to_plot_arr = [
-            [(PLOT_TEXTS['z_err_mean'], relative_err_mean), ('R2', r2_score)],
+            [(PLOT_TEXTS['z_err_mean'], relative_err_mean), ('number of objects', my_size)],
+            [('R2', r2_score), ('number of objects', my_size)],
             [(PLOT_TEXTS['z_err_mean'], relative_err_mean), (PLOT_TEXTS['z_err_std'], relative_err_std)],
         ]
         for metrics_to_plot in metrics_to_plot_arr:
@@ -323,11 +328,12 @@ def classification_and_redshift_report(predictions):
             for i, (metric_name, metric_func) in enumerate(metrics_to_plot):
                 # Get scores limited by classification probability thresholds
                 metric_values = []
-                for thr in thresholds:
+                thresholds_to_use = thresholds if metric_name != 'number of objects' else (np.append(thresholds, [thresholds[-1] + step]))
+                for thr in thresholds_to_use:
                     preds_lim = preds_class.loc[preds_class['{}_PHOTO'.format(cls)] >= thr]
                     metric_values.append(np.around(metric_func(preds_lim['Z'], preds_lim['Z_PHOTO']), 4))
 
-                plotted, = ax_arr[i].plot(thresholds, metric_values, label=metric_name, color=color_palette[i],
+                plotted, = ax_arr[i].plot(thresholds_to_use, metric_values, label=metric_name, color=color_palette[i],
                                           linestyle=get_line_style(i))
                 ax_arr[i].tick_params(axis='y', labelcolor=color_palette[i])
                 # ax_arr[i].set_ylabel(metric_name)
@@ -338,12 +344,9 @@ def classification_and_redshift_report(predictions):
             plt.legend(handles=plotted_arr, loc='center left')
             plt.show()
 
-        plot_proba_against_size(predictions.loc[predictions['CLASS_PHOTO'] == cls], column='{}_PHOTO'.format(cls),
-                                x_lim=(0.3, 1))
-
 
 def redshift_uncertainity_cleaning_report(predictions):
-    step = 0.02
+    step = 0.01
     classes = ['QSO', 'GALAXY']
     for cls in classes:
         preds_class = predictions.loc[predictions['CLASS_PHOTO'] == cls]
@@ -351,7 +354,8 @@ def redshift_uncertainity_cleaning_report(predictions):
                                step)
 
         metrics_to_plot_arr = [
-            [(PLOT_TEXTS['z_err_mean'], relative_err_mean), ('R2', r2_score)],
+            [(PLOT_TEXTS['z_err_mean'], relative_err_mean), ('number of objects', my_size)],
+            [('R2', r2_score), ('number of objects', my_size)],
             [(PLOT_TEXTS['z_err_mean'], relative_err_mean), (PLOT_TEXTS['z_err_std'], relative_err_std)],
         ]
         for metrics_to_plot in metrics_to_plot_arr:
@@ -368,11 +372,12 @@ def redshift_uncertainity_cleaning_report(predictions):
 
                 # Get scores limited by classification probability thresholds
                 metric_values = []
-                for thr in thresholds:
+                thresholds_to_use = thresholds if metric_name != 'number of objects' else (np.append(thresholds, [thresholds[-1] + step]))
+                for thr in thresholds_to_use:
                     preds_lim = preds_class.loc[preds_class['Z_PHOTO_STDDEV'] <= thr]
                     metric_values.append(np.around(metric_func(preds_lim['Z'], preds_lim['Z_PHOTO']), 4))
 
-                plotted, = ax_arr[i].plot(thresholds, metric_values, label=metric_name, color=color_palette[i],
+                plotted, = ax_arr[i].plot(thresholds_to_use, metric_values, label=metric_name, color=color_palette[i],
                                           linestyle=get_line_style(i))
                 ax_arr[i].tick_params(axis='y', labelcolor=color_palette[i])
                 # ax_arr[i].set_ylabel(metric_name)
@@ -382,16 +387,6 @@ def redshift_uncertainity_cleaning_report(predictions):
             fig.tight_layout()  # otherwise the right y-label is slightly clipped
             plt.legend(handles=plotted_arr, loc='center left')
             plt.show()
-
-        # Size plot
-        preds_qso = predictions.loc[predictions['CLASS_PHOTO'] == 'QSO']
-        data_size_arr = [preds_qso.loc[preds_qso['Z_PHOTO_STDDEV'] <= thr].shape[0] for thr in thresholds]
-        plt.plot(thresholds, data_size_arr)
-        plt.xlabel('{} redshift uncertainity threshold'.format(get_plot_text(cls, is_photo=True)))
-        plt.ylabel('{} size'.format(get_plot_text(cls, is_photo=True)))
-        ax = plt.axes()
-        ax.invert_xaxis()
-        plt.show()
 
 
 def metric_class_split(y_true, y_pred, classes, metric):
@@ -623,14 +618,14 @@ def gaia_motion_analysis(data, norm=False, class_col='CLASS_PHOTO'):
         print(result_df)
 
 
-def proba_motion_analysis(data_x_gaia, motions=['parallax'], x_lim=(0.3, 1), step=0.02):
+def proba_motion_analysis(data_x_gaia, motions=['parallax'], x_lim=(0.3, 1), step=0.01):
     mu_dict, sigma_dict, median_dict = defaultdict(list), defaultdict(list), defaultdict(list)
 
     # Get QSOs
     qso_x_gaia = data_x_gaia.loc[data_x_gaia['CLASS_PHOTO'] == 'QSO']
 
     # Limit QSOs to proba thresholds
-    thresholds = np.arange(x_lim[0], x_lim[1] + step, step)
+    thresholds = np.arange(x_lim[0], x_lim[1], step)
     for thr in thresholds:
         qso_x_gaia_limited = qso_x_gaia.loc[qso_x_gaia['QSO_PHOTO'] >= thr]
 

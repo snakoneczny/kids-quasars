@@ -158,6 +158,17 @@ def get_column_desc(column_data):
     return desc
 
 
+def pretty_print_feature(str):
+    if str == 'CLASS_STAR':
+        return 'stellarity index'
+    elif str.startswith('MAG'):
+        return pretty_print_magnitude(str)
+    elif str.startswith('COLOUR') or str.startswith('RATIO'):
+        return pretty_print_mags_combination(str)
+    else:
+        return str
+
+
 def pretty_print_magnitude(str):
     return str.split('_')[-1] + ' magnitude'
 
@@ -168,17 +179,6 @@ def pretty_print_mags_combination(str):
     combination = str.split('_')[0]
     combination_symbol = {'COLOUR': '-', 'RATIO': '/'}[combination]
     return '{}{}{} {}'.format(m_1, combination_symbol, m_2, combination.lower())
-
-
-def pretty_print_feature(str):
-    if str == 'CLASS_STAR':
-        return 'stellarity index'
-    elif str.startswith('MAG'):
-        return pretty_print_magnitude(str)
-    elif str.startswith('COLOUR') or str.startswith('RATIO'):
-        return pretty_print_mags_combination(str)
-    else:
-        return str
 
 
 def get_external_qso_short_name(full_name):

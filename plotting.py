@@ -30,6 +30,25 @@ CUSTOM_COLORS = {
 
 LINE_STYLES = ['-', '--', '-.', ':']
 
+LABELS_ORDER = [
+    'safe',
+    'extrapolation',
+    'extrapolation, r <= 23',
+    'extrapolation, r > 23',
+    'unsafe',
+    'QSO',
+    'QSO_PHOTO',
+    'STAR',
+    'STAR_PHOTO',
+    'GALAXY',
+    'GALAXY_PHOTO',
+    'not SDSS',
+    'no class',
+    'UNKNOWN',
+    False,
+    True,
+]
+
 PLOT_TEXTS = {
     'GALAXY': r'$galaxy_{spec}$',
     'STAR': r'$star_{spec}$',
@@ -70,63 +89,76 @@ def get_cubehelix_palette(n):
         return palette
 
 
-def make_embedding_plots(data):
-    embedding = data[['tsne_0', 'tsne_1']].values
+def make_embedding_plots(data, legend_loc='lower right'):
+    embedding = data[['t-SNE x', 't-SNE y']].values
+
+    # Photometric plots
+    plot_embedding(embedding, data[get_mag_str('r')], label='r magnitude', is_continuous=True, legend_loc=legend_loc)
+    plot_embedding(embedding, data[get_magerr_str('r')], label='r mag. error', is_continuous=True,
+                   legend_loc=legend_loc)
+
+    # Flags
+    plot_embedding(embedding, data['IMAFLAGS_ISO_1'], label='IMAFLAGS_ISO 1st bit', is_continuous=False,
+                   legend_loc=legend_loc)
+    plot_embedding(embedding, data['MASK_2'], label='MASK 2nd bit', is_continuous=False, legend_loc=legend_loc)
+    plot_embedding(embedding, data['MASK_13'], label='MASK 13th bit', is_continuous=False, legend_loc=legend_loc)
+
+    # Point like classifiers
+    plot_embedding(embedding, data['CLASS_STAR'], label='class star', is_continuous=True, legend_loc=legend_loc)
+    plot_embedding(embedding, data['SG2DPHOT_3'], label='SG2DPHOT 3rd bit', is_continuous=False, legend_loc=legend_loc)
 
     # Spectroscopic plots
     if 'CLASS' in data:
-        plot_embedding(embedding, data['CLASS'], label='SDSS class')
+        plot_embedding(embedding, data['CLASS'], label='SDSS class', legend_loc=legend_loc)
+        if (data['CLASS'] == 'no class').any():
+            idx = data['CLASS'] != 'no class'
+            plot_embedding(embedding[idx], data.loc[idx, 'CLASS'], label='SDSS class', legend_loc=legend_loc)
     if 'Z' in data:
-        plot_embedding(embedding, data['Z'], label='redshift z', is_continuous=True)
+        plot_embedding(embedding, data['Z'], label='redshift z', is_continuous=True, legend_loc=legend_loc)
     # And ML from KiDS
     if 'Z_B' in data:
-        plot_embedding(embedding, data['Z_B'], label='redshift Z_B', is_continuous=True)
+        plot_embedding(embedding, data['Z_B'], label='redshift Z_B', is_continuous=True, legend_loc=legend_loc)
 
-    plot_embedding(embedding, data[get_mag_str('r')], label='r magnitude', is_continuous=True)
-
-    # Photometric plots
+    # ML plots
+    if 'subset' in data:
+        plot_embedding(embedding, data['subset'], label='inference subset', legend_loc=legend_loc)
     if 'CLASS_PHOTO' in data:
-        plot_embedding(embedding, data['CLASS_PHOTO'], label='photo class')
-        plot_embedding(embedding, data['QSO_PHOTO'], label='QSO proba', is_continuous=True)
+        plot_embedding(embedding, data['CLASS_PHOTO'], label='photo class', legend_loc=legend_loc)
+        plot_embedding(embedding, data['QSO_PHOTO'], label='QSO proba', is_continuous=True, legend_loc=legend_loc)
     if 'Z_PHOTO' in data:
-        plot_embedding(embedding, data['Z_PHOTO'], label='photo z', is_continuous=True)
+        plot_embedding(embedding, data['Z_PHOTO'], label='photo z', is_continuous=True, legend_loc=legend_loc)
+    if 'Z_PHOTO_STDDEV' in data:
+        plot_embedding(embedding, data['Z_PHOTO_STDDEV'], label='photo z uncertainity', is_continuous=True,
+                       legend_loc=legend_loc)
     if 'is_train' in data:
-        plot_embedding(embedding, data['is_train'], label='used in training')
-
-    # Point like classifiers
-    plot_embedding(embedding, data['CLASS_STAR'], label='class star', is_continuous=True)
-    plot_embedding(embedding, data['SG2DPHOT_3'], label='SG2DPHOT 3rd bit', is_continuous=True)
-
-    # Error
-    plot_embedding(embedding, data[get_magerr_str('r')], label='r mag. error', is_continuous=True)
-
-    # Flags
-    plot_embedding(embedding, data['IMAFLAGS_ISO_1'], label='IMAFLAGS_ISO 1st bit', is_continuous=True)
-    plot_embedding(embedding, data['MASK_2'], label='MASK 2nd bit', is_continuous=True)
-    plot_embedding(embedding, data['MASK_13'], label='MASK 13th bit', is_continuous=True)
+        plot_embedding(embedding, data['is_train'], label='used in training', legend_loc=legend_loc)
 
 
 def plot_embedding(embedding, labels, label='class', is_continuous=False, alpha=0.5, color_palette='cubehelix',
-                   with_custom_colors=True, labels_in_order=False, legend_loc='upper right'):
-    if not is_continuous:
-        labels_unique = np.unique(labels)
+                   with_custom_colors=True, labels_in_order=True, legend_loc='upper left'):
+    if is_continuous:
+        f, ax = plt.subplots(figsize=(9, 7))
+        points = ax.scatter(embedding[:, 0], embedding[:, 1], c=labels, s=50, cmap='gnuplot_r', alpha=alpha)
+        plt.xlabel('t-SNE x')
+        plt.ylabel('t-SNE y')
+        cb = f.colorbar(points)
+        cb.set_label(pretty_print_feature(label))
+
+    else:
+        labels_unique = [label for label in LABELS_ORDER if
+                         label in np.unique(labels)] if labels_in_order else np.unique(labels)
         n_colors = len(labels_unique)
         if isinstance(color_palette, str):
             color_palette = sns.color_palette(color_palette, n_colors)
             color_palette = {labels_unique[k]: v for k, v in enumerate(color_palette)}
-        if with_custom_colors: color_palette.update(CUSTOM_COLORS)
+        if with_custom_colors:
+            color_palette.update(CUSTOM_COLORS)
 
-        data = pd.DataFrame({'x': embedding[:, 0], 'y': embedding[:, 1], label: labels})
-        hue_order = color_palette.keys() if labels_in_order else None
-        sns.lmplot(x='x', y='y', hue=label, data=data, palette=color_palette, fit_reg=False,
+        data = pd.DataFrame({'t-SNE x': embedding[:, 0], 't-SNE y': embedding[:, 1], label: labels})
+        hue_order = [label for label in LABELS_ORDER if label in color_palette.keys()] if labels_in_order else None
+        sns.lmplot(x='t-SNE x', y='t-SNE y', hue=label, data=data, palette=color_palette, fit_reg=False,
                    scatter_kws={'alpha': alpha}, size=7, hue_order=hue_order, legend=False)
-        plt.legend(loc=legend_loc)
-
-    else:
-        f, ax = plt.subplots(figsize=(9, 7))
-        points = ax.scatter(embedding[:, 0], embedding[:, 1], c=labels, s=50, cmap='gnuplot_r', alpha=alpha)
-        cb = f.colorbar(points)
-        cb.set_label(label)
+        plt.legend(loc=legend_loc, title=pretty_print_feature(label))
 
     plt.show()
 
@@ -203,23 +235,41 @@ def plot_proba_histograms(data):
 
 
 def plot_histograms(data_dict, columns=BAND_COLUMNS, x_lim_dict=None, title=None, pretty_print_function=None,
-                    legend_loc='upper left', legend_size=None):
+                    legend_loc='upper left', legend_size=None, norm_hist=True, log_y=False, vlines=None):
     color_palette = get_cubehelix_palette(len(data_dict))
+    sns.set_style('whitegrid')
     for column in columns:
 
         plt.figure()
         for i, (label, data) in enumerate(data_dict.items()):
-            sns.distplot(data[column], label=label, kde=False, rug=False, norm_hist=True, color=color_palette[i],
-                         hist_kws={'alpha': 1.0, 'histtype': 'step', 'linewidth': 1.5, 'linestyle': get_line_style(i)})
+            ax = sns.distplot(data[column], label=label, kde=False, rug=False, norm_hist=norm_hist,
+                              color=color_palette[i],
+                              hist_kws={'alpha': 1.0, 'histtype': 'step', 'linewidth': 1.5,
+                                        'linestyle': get_line_style(i)})
+            if log_y: ax.set_yscale('log')
 
         if x_lim_dict and column in x_lim_dict:
             plt.xlim(x_lim_dict[column][0], x_lim_dict[column][1])
 
-        if title: plt.title(title)
-        if pretty_print_function: plt.xlabel(pretty_print_function(column))
-        plt.ylabel('normalized counts per bin')
+        if title:
+            plt.title(title)
+
+        if pretty_print_function:
+            plt.xlabel(pretty_print_function(column))
+
+        y_label = 'counts per bin'
+        if norm_hist:
+            y_label = 'normalized ' + y_label
+        if log_y:
+            y_label = 'log ' + y_label
+        plt.ylabel(y_label)
+
         prop = {'size': legend_size} if legend_size else {}
         plt.legend(loc=legend_loc, prop=prop)
+
+        if vlines:
+            for x in vlines:
+                plt.axvline(x=x, color='r', linestyle='--')
 
         plt.tight_layout()
         plt.show()
