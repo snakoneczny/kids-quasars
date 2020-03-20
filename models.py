@@ -235,7 +235,7 @@ class AnnReg(BaseEstimator):
             self.callbacks.append(ModelCheckpoint(self.model_path, monitor='val_loss', save_best_only=True,
                                                   save_weights_only=True, verbose=1))
         else:
-            self.callbacks.append(EarlyStopping(monitor='val_loss', patience=self.patience,
+            self.callbacks.append(EarlyStopping(monitor='val_mean_squared_error', patience=self.patience,
                                                 restore_best_weights=True))
         if not self.params_exp['is_test']:
             self.callbacks.append(CustomTensorBoard(log_folder=log_name, params=self.params_exp,

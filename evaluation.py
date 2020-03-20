@@ -11,7 +11,7 @@ from sklearn.metrics import accuracy_score, f1_score, confusion_matrix, log_loss
     recall_score, average_precision_score, precision_recall_curve, mean_squared_error, r2_score
 
 from data import DATA_PATH, EXTERNAL_QSO, BASE_CLASSES, BAND_COLUMNS, get_mag_str, clean_gaia, process_2df, \
-    read_fits_to_pandas
+    read_fits_to_pandas, process_bitmaps
 from utils import assign_redshift, pretty_print_magnitude, get_column_desc, get_map
 from plotting import PLOT_TEXTS, plot_confusion_matrix, plot_roc_curve, plot_precision_recall_curve, get_line_style, \
     get_cubehelix_palette, plot_proba_histograms, get_plot_text
@@ -48,6 +48,14 @@ def experiment_report(predictions, preds_z_qso=None, preds_z_galaxy=None, test_s
         mask = predictions[['QSO_PHOTO', 'GALAXY_PHOTO', 'STAR_PHOTO']].max(axis=1) > min_clf_proba
         predictions = predictions.loc[mask]
 
+    # Get results on flagged objects
+    # ['Flag_1', 'Flag_2', 'IMAFLAGS_ISO_1', 'MASK_2', 'MASK_13']
+    # flag_col = 'MASK_13'
+    # print(flag_col, predictions.shape, predictions.loc[predictions[flag_col] == 1].shape)
+    # idx = (predictions[flag_col] == 1)
+    # predictions = predictions.loc[idx]
+    # print(get_column_desc(predictions['CLASS']))
+
     if 'CLASS_PHOTO' in predictions.columns:
         multiclass_report(predictions, col_true=col_true)
         binary_report(predictions, col_true=col_true)
@@ -70,7 +78,8 @@ def experiment_report(predictions, preds_z_qso=None, preds_z_galaxy=None, test_s
 
 def add_kids_columns(preds):
     kids_x_sdss = read_fits_to_pandas(os.path.join(DATA_PATH, 'KiDS/DR4/KiDS.DR4.x.SDSS.DR14.fits'),
-                                      ['ID', 'Z_B', 'Z_ML'])
+                                      ['ID', 'Z_B', 'Z_ML', 'Flag', 'IMAFLAGS_ISO', 'MASK'])
+    kids_x_sdss = process_bitmaps(kids_x_sdss)
     return preds.merge(kids_x_sdss, on=['ID'])
 
 
@@ -536,21 +545,6 @@ def test_external_qso(catalog, save=False, plot=True):
         test_against_external_catalog(external_catalog, catalog, title=title, plot=plot, save=save)
 
 
-def test_gaia(catalog, catalog_x_gaia_path, class_column='CLASS_PHOTO', id_column='ID', save=False):
-    print('catalog size: {}'.format(catalog.shape[0]))
-    print(get_column_desc(catalog[class_column]))
-
-    catalog_x_gaia = read_fits_to_pandas(catalog_x_gaia_path)
-
-    movement_mask = ~catalog_x_gaia[['parallax', 'pmdec', 'pmra']].isnull().any(axis=1)
-    catalog_x_gaia_movement = catalog_x_gaia.loc[movement_mask]
-
-    catalog_x_gaia_movement = clean_gaia(catalog_x_gaia_movement)
-
-    test_against_external_catalog(catalog_x_gaia_movement, catalog, class_column=class_column, id_column=id_column,
-                                  title='GAIA', save=save)
-
-
 def test_against_external_catalog(ext_catalog, catalog, columns=BAND_COLUMNS, class_column='CLASS_PHOTO',
                                   id_column='ID', title='', plot=True, save=False):
     # ID_1 is due to cross matching catalogs with common ID column
@@ -586,6 +580,21 @@ def test_against_external_catalog(ext_catalog, catalog, columns=BAND_COLUMNS, cl
 
     if save:
         catalog.loc[is_in_ext].to_csv('catalogs_intersection/{}.csv'.format(title))
+
+
+def test_gaia(catalog, catalog_x_gaia_path, class_column='CLASS_PHOTO', id_column='ID', save=False):
+    print('catalog size: {}'.format(catalog.shape[0]))
+    print(get_column_desc(catalog[class_column]))
+
+    catalog_x_gaia = read_fits_to_pandas(catalog_x_gaia_path)
+
+    movement_mask = ~catalog_x_gaia[['parallax', 'pmdec', 'pmra']].isnull().any(axis=1)
+    catalog_x_gaia_movement = catalog_x_gaia.loc[movement_mask]
+
+    catalog_x_gaia_movement = clean_gaia(catalog_x_gaia_movement)
+
+    test_against_external_catalog(catalog_x_gaia_movement, catalog, class_column=class_column, id_column=id_column,
+                                  title='GAIA', save=save)
 
 
 def gaia_motion_analysis(data, norm=False, class_col='CLASS_PHOTO'):

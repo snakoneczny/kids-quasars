@@ -98,6 +98,8 @@ def make_embedding_plots(data, legend_loc='lower right'):
                    legend_loc=legend_loc)
 
     # Flags
+    plot_embedding(embedding, data['Flag_1'], label='Flag 1st bit', is_continuous=False, legend_loc=legend_loc)
+    plot_embedding(embedding, data['Flag_2'], label='Flag 2nd bit', is_continuous=False, legend_loc=legend_loc)
     plot_embedding(embedding, data['IMAFLAGS_ISO_1'], label='IMAFLAGS_ISO 1st bit', is_continuous=False,
                    legend_loc=legend_loc)
     plot_embedding(embedding, data['MASK_2'], label='MASK 2nd bit', is_continuous=False, legend_loc=legend_loc)
@@ -346,7 +348,7 @@ def plot_proba_against_size(data, column='QSO', x_lim=(0, 1), step=0.01):
 
 
 def plot_external_qso_consistency(catalog):
-    step = 0.05
+    step = 0.01
     thresholds = np.arange(0.3, 1.0, step)
     color_palette = get_cubehelix_palette(len(EXTERNAL_QSO))
 
