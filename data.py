@@ -260,14 +260,6 @@ def clean_kids(data, bands=BANDS, with_print=True):
     return data_no_na.loc[mask].reset_index(drop=True)
 
 
-# def calib_mag_for_ext(data):
-#     for b in BANDS_DR3:
-#         data['MAG_GAAP_CALIB_{}'.format(b)] = data['MAG_GAAP_{}'.format(b)] + \
-#                                               data['ZPT_OFFSET_{}'.format(b)] - \
-#                                               data['EXT_SFD_{}'.format(b)]
-#     return data
-
-
 def cut_r(data, with_print=True):
     data_cut = data.loc[data[get_mag_str('r')] < 22].reset_index(drop=True)
     if with_print: print('Removing R > 22: {} left'.format(data_cut.shape[0]))
@@ -319,28 +311,14 @@ def process_bitmaps(data, bitmap_cols=None):
 
 
 def clean_sdss(data, with_print=True):
-    # Keep old values of Z and ZWARNING and merge them with no-qso ones for galaxy subset
-    # for c in ['Z', 'Z_ERR', 'ZWARNING']:
-    #     data.loc[:, '{}_org'.format(c)] = data.loc[:, c]
-    # data_galaxy = data.loc[(data['CLASS'] == 'GALAXY') & (data['CLASS_NOQSO'] == 'GALAXY')]
-    # for c in ['Z', 'Z_ERR', 'ZWARNING']:
-    #     data_galaxy.loc[:, c] = data_galaxy.loc[:, '{}_NOQSO'.format(c)]
-    # data.update(data_galaxy)
-
     data_cleaned = data.loc[data['ZWARNING'] == 0].reset_index(drop=True)
     if with_print:
         print('Cleaning SDSS: {} left'.format(data_cleaned.shape[0]))
-
-    # data_cleaned = data_cleaned.drop(
-    #     data_cleaned.loc[(data_cleaned['CLASS'] == 'GALAXY') & (data_cleaned['Z'] < 1e-3)].index)
-    # if with_print:
-    #     print('Dropping galaxies at z < 0.001: {} left'.format(data_cleaned.shape[0]))
-
     return data_cleaned
 
 
 def process_gaia(data, parallax_error=1, pm_error=None, parallax_lim=None, pm_lim=None, with_print=True):
-    # Get 5 position observations (parallax should suffice)
+    # Get 5 position observations (parallax should be enough)
     movement_mask = ~data[['parallax']].isnull().any(axis=1)
     data = data.loc[movement_mask]
     if with_print: print('5 position shape: {}'.format(data.shape))
@@ -351,6 +329,7 @@ def process_gaia(data, parallax_error=1, pm_error=None, parallax_lim=None, pm_li
     return data
 
 
+# TODO: use logger instead of printing
 def clean_gaia(data, parallax_error=1, pm_error=None, parallax_lim=None, pm_lim=None, with_print=True):
     if parallax_error:
         data = data.loc[data['parallax_error'] < parallax_error]

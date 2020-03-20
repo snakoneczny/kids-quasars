@@ -44,7 +44,6 @@ train_data = process_kids(data_path_train, columns=COLUMNS_KIDS_ALL+COLUMNS_SDSS
                           sdss_cleaning=True)
 
 # Limit train data to a given class in case of redshift prediction
-# TODO: check if works properly
 if cfg['specialization']:
     mask = (train_data['CLASS'] == cfg['specialization'])
     train_data = train_data.loc[mask]
@@ -69,7 +68,7 @@ X_train, X_test, y_train, y_test, z_train, z_test, idx_train, idx_test = train_t
 model = get_model(cfg)
 if args.read:
     # Read already trained weights
-    # TODO: save scaler and weights, save the whole pipeline?
+    # TODO: save scaler, save the whole pipeline?
     logger.info('Loading weights..')
     model.scaler.fit_transform(X_train)
     model.network = model.create_network(model.params_exp)

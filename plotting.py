@@ -356,7 +356,7 @@ def plot_external_qso_consistency(catalog):
     data_dict = OrderedDict(
         (data_name, read_fits_to_pandas(data_path, columns=columns)) for data_name, data_path, columns in EXTERNAL_QSO)
 
-    # TODO: Ugly work around
+    # TODO: Ugly work around, extract process_DiPompeo function
     # Limit galex to minimum QSO proba
     data_dict['x DiPompeo 2015'] = data_dict['x DiPompeo 2015'].loc[data_dict['x DiPompeo 2015']['PQSO'] > 0.7]
 
@@ -433,11 +433,10 @@ def plot_external_qso_size(data):
     plt.show()
 
 
-# TODO: intelligence of feature importance should not be here?
+# TODO: mechanics of feature importance should not be here?
 def plot_feature_ranking(model, features, model_type='rf', importance_type='gain', n_features=15, title=None):
     if model_type == 'rf':
         importances = model.feature_importances_ * 100
-        # no std because it's too big
         # std = np.std([tree.feature_importances_ for tree in model.estimators_], axis=0)
     elif model_type == 'xgb':
         model.get_booster().feature_names = features
@@ -464,7 +463,6 @@ def plot_feature_ranking(model, features, model_type='rf', importance_type='gain
 
     val_0 = importances_sorted[0]
     for i, value in enumerate(importances_sorted):
-        # offset = -3.6 if i == 0 else .3
         offset = -0.17 * val_0 if i == 0 else .02 * val_0
         color = 'white' if i == 0 else 'black'
         ax.text(value + offset, i + .2, '{:.2f}%'.format(value), color=color)
