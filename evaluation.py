@@ -1,6 +1,8 @@
 import os
 import math
 from collections.__init__ import defaultdict, OrderedDict
+import multiprocessing
+from functools import partial
 
 import numpy as np
 import pandas as pd
@@ -9,6 +11,10 @@ import seaborn as sns
 from matplotlib import pyplot as plt
 from sklearn.metrics import accuracy_score, f1_score, confusion_matrix, log_loss, roc_curve, auc, precision_score, \
     recall_score, average_precision_score, precision_recall_curve, mean_squared_error, r2_score
+from astropy.cosmology import WMAP9 as cosmo_wmap9
+from astropy.cosmology import z_at_value
+import astropy.units as u
+from tqdm import tqdm
 
 from data import DATA_PATH, EXTERNAL_QSO, BASE_CLASSES, BAND_COLUMNS, get_mag_str, clean_gaia, process_2df, \
     read_fits_to_pandas, process_bitmaps
@@ -32,10 +38,10 @@ def my_size(y_true, y_pred):
 
 
 def experiment_report(predictions, preds_z_qso=None, preds_z_galaxy=None, test_subset=None, min_clf_proba=None,
-                      z_max=None, col_true='CLASS'):
+                      z_max=None, col_true='CLASS', flag=None, pointlike=False):
     np.set_printoptions(precision=4)
 
-    predictions = add_kids_columns(predictions)
+    predictions = add_kids_sdss_columns(predictions)
 
     if preds_z_qso is not None:
         predictions = assign_redshift(predictions, preds_z_qso, preds_z_galaxy)
@@ -48,13 +54,11 @@ def experiment_report(predictions, preds_z_qso=None, preds_z_galaxy=None, test_s
         mask = predictions[['QSO_PHOTO', 'GALAXY_PHOTO', 'STAR_PHOTO']].max(axis=1) > min_clf_proba
         predictions = predictions.loc[mask]
 
-    # Get results on flagged objects
-    # ['Flag_1', 'Flag_2', 'IMAFLAGS_ISO_1', 'MASK_2', 'MASK_13']
-    # flag_col = 'MASK_13'
-    # print(flag_col, predictions.shape, predictions.loc[predictions[flag_col] == 1].shape)
-    # idx = (predictions[flag_col] == 1)
-    # predictions = predictions.loc[idx]
-    # print(get_column_desc(predictions['CLASS']))
+    if flag:
+        predictions = predictions.loc[predictions[flag] == 1]
+
+    if pointlike:
+        predictions = predictions.loc[predictions['CLASS_STAR'] > 0.8]
 
     if 'CLASS_PHOTO' in predictions.columns:
         multiclass_report(predictions, col_true=col_true)
@@ -76,9 +80,9 @@ def experiment_report(predictions, preds_z_qso=None, preds_z_galaxy=None, test_s
             redshift_uncertainity_cleaning_report(predictions)
 
 
-def add_kids_columns(preds):
+def add_kids_sdss_columns(preds):
     kids_x_sdss = read_fits_to_pandas(os.path.join(DATA_PATH, 'KiDS/DR4/KiDS.DR4.x.SDSS.DR14.fits'),
-                                      ['ID', 'Z_B', 'Z_ML', 'Flag', 'IMAFLAGS_ISO', 'MASK'])
+                                      ['ID', 'Z_B', 'Z_ML', 'Flag', 'IMAFLAGS_ISO', 'MASK', 'CLASS_STAR'])
     kids_x_sdss = process_bitmaps(kids_x_sdss)
     return preds.merge(kids_x_sdss, on=['ID'])
 
@@ -337,7 +341,8 @@ def classification_and_redshift_report(predictions):
             for i, (metric_name, metric_func) in enumerate(metrics_to_plot):
                 # Get scores limited by classification probability thresholds
                 metric_values = []
-                thresholds_to_use = thresholds if metric_name != 'number of objects' else (np.append(thresholds, [thresholds[-1] + step]))
+                thresholds_to_use = thresholds if metric_name != 'number of objects' else (
+                    np.append(thresholds, [thresholds[-1] + step]))
                 for thr in thresholds_to_use:
                     preds_lim = preds_class.loc[preds_class['{}_PHOTO'.format(cls)] >= thr]
                     metric_values.append(np.around(metric_func(preds_lim['Z'], preds_lim['Z_PHOTO']), 4))
@@ -381,7 +386,8 @@ def redshift_uncertainity_cleaning_report(predictions):
 
                 # Get scores limited by classification probability thresholds
                 metric_values = []
-                thresholds_to_use = thresholds if metric_name != 'number of objects' else (np.append(thresholds, [thresholds[-1] + step]))
+                thresholds_to_use = thresholds if metric_name != 'number of objects' else (
+                    np.append(thresholds, [thresholds[-1] + step]))
                 for thr in thresholds_to_use:
                     preds_lim = preds_class.loc[preds_class['Z_PHOTO_STDDEV'] <= thr]
                     metric_values.append(np.around(metric_func(preds_lim['Z'], preds_lim['Z_PHOTO']), 4))
@@ -406,41 +412,114 @@ def metric_class_split(y_true, y_pred, classes, metric):
     return scores
 
 
-def number_counts(data, x_lim=None, title=None, legend_loc='upper left', columns=BAND_COLUMNS):
-    # Get x limit from all magnitudes
-    if x_lim is None:
-        m_min = int(math.floor(data[columns].values.min()))
-        m_max = int(math.ceil(data[columns].values.max()))
-        bins = np.arange(m_min, m_max + 1.0, 1.0)
-    else:
-        bins = np.arange(x_lim[0], x_lim[1] + 1.0, 1.0)
+def number_counts(data_dict, linear_data, step=.1, band='r', legend_loc='upper left', title=None):
+    band_column = get_mag_str(band)
 
-    bin_titles = ['({}, {}]'.format(bins[i], bins[i + 1]) for i, _ in enumerate(bins[:-1])]
+    # counts = pd.DataFrame()
+    color_palette = get_cubehelix_palette(len(data_dict))
+    for i, (data_name, data) in enumerate(data_dict.items()):
+        m_min = int(math.ceil(data[band_column].min()))
+        m_max = int(math.ceil(data[band_column].max()))
 
-    # Plot for every magnitude
-    counts = pd.DataFrame()
-    for band in columns:
+        # Create x
+        magnitude_arr = np.arange(m_min, m_max + step, step)
+        counts_sum_arr = [data.loc[data[band_column] < m_max].shape[0] for m_max in magnitude_arr]
+        counts_log_arr = np.log10(counts_sum_arr)
 
-        # Bin magnitudes
-        data.loc[:, 'bin'] = pd.cut(data[band], bins, labels=False)
+        # TODO: line style
+        sns.lineplot(magnitude_arr, counts_log_arr, label=data_name, c=color_palette[i])
 
         # For each bin
-        for i in range(len(bins) - 1):
-            data_bin = data.loc[data['bin'] == i]
-            counts = counts.append({'objects': data_bin.shape[0], 'magnitude range': bin_titles[i], 'magnitude': band},
-                                   ignore_index=True)
+        # for i in range(len(bins) - 1):
+        #     data_bin = data.loc[data['bin'] == i]
+        #     counts = counts.append({'objects': data_bin.shape[0], band_column: bin_titles[i], 'dataset': data_name},
+        #                            ignore_index=True)
 
-    sns.catplot(x='magnitude range', y='objects', hue='magnitude', data=counts, kind='bar',
-                aspect=1.7, height=5, legend_out=False, palette='cubehelix')
+        # sns.catplot(x=band_column, y='objects', hue='dataset', data=counts, kind='bar',
+        #             aspect=1.6, height=5, legend_out=False, palette='cubehelix')
+
+    for scale, const, x_lim, color in linear_data:
+        x_linear = np.arange(x_lim[0], x_lim[1] + step, step)
+        y_linear = [scale * m - const for m in x_linear]
+        plt.plot(x_linear, y_linear, color, label='{} * m - {}'.format(scale, const))
+
     plt.legend(loc=legend_loc)
-    plt.yscale('log')
+    plt.xlabel(pretty_print_magnitude(band_column))
+    plt.ylabel(r'$log_{10}$ N(≤ m)')
     plt.title(title)
+    plt.show()
 
 
-def number_counts_multidata(data_dict, x_lim, step=.5, band='r', legend_loc='upper left'):
+def spatial_number_density(data, z_bin_step=0.5, z_bin_size=1, z_column='Z', m_max=None, cosmo_model=cosmo_wmap9,
+                           sky_coverage=None, z_max=None):
+    z_half_bin_size = z_bin_size / 2
+    steps = np.arange(data[z_column].min() + z_half_bin_size, data[z_column].max() + z_half_bin_size, z_bin_step)
+    comoving_volumes = np.array([(cosmo_model.comoving_volume(step + z_half_bin_size)
+                                  - cosmo_model.comoving_volume(step - z_half_bin_size)).value for step in steps])
+    if sky_coverage:
+        comoving_volumes = [v * sky_coverage / 41253.0 for v in comoving_volumes]
+
+    if 'v_weight' in data:
+        v_weights = data['v_weight']
+    else:
+        m_max = data[get_mag_str('r')].max() if not m_max else m_max
+        v_weights = get_v_max_weights(data[get_mag_str('r')], data[z_column], m_max=m_max, cosmo_model=cosmo_model)
+
+    counts_v_max = np.array(
+        [np.nansum(v_weights[(data[z_column] > step - z_half_bin_size) & (data[z_column] < step + z_half_bin_size)]) for
+         step in steps])
+    comoving_v_max_densities = (counts_v_max / comoving_volumes)
+
+    plt.figure()
+    sns.lineplot(steps, np.log10(comoving_v_max_densities))
+    plt.xlabel('z')
+    plt.xlim(right=z_max)
+    plt.ylabel(r'$log_{10}$ (sum ($V / V_{max}$) / comoving Mpc)')
+    plt.show()
+
+
+def test_v_max(magnitudes, redshifts, step=1, cosmo_model=cosmo_wmap9):
+    m_max_arr = np.arange(magnitudes.min() + step, magnitudes.max() + step, step)
+    v_max_test_mean_arr = []
+    for step_m_max in m_max_arr:
+        idx = magnitudes <= step_m_max
+        v_max_test_mean_arr.append(
+            np.mean(get_v_max_weights(magnitudes.loc[idx], redshifts.loc[idx], step_m_max, cosmo_model=cosmo_model)))
+
+    sns.scatterplot(m_max_arr, v_max_test_mean_arr)
+    plt.xlabel('limiting magnitude')
+    plt.ylabel(r'mean $V / V_{max}$')
+    plt.show()
+
+
+def get_v_max_weights(magnitudes, redshifts, m_max=None, cosmo_model=cosmo_wmap9, processes=24):
+    size = magnitudes.shape[0]
+    m_max = magnitudes.max() if not m_max else m_max
+
+    comoving_volumes = cosmo_model.comoving_volume(redshifts.values).value
+    luminosity_distances = cosmo_model.luminosity_distance(redshifts).value
+    absolute_magnitudes = magnitudes.values - 5 * (np.log10(luminosity_distances) - 1)
+    luminosity_distances_max = np.power([10] * size, ((m_max - absolute_magnitudes) / 5) + 1)
+
+    z_at_value_partial = partial(z_at_value, cosmo_model.luminosity_distance)
+    args = [luminosity_distance_max * u.Mpc for luminosity_distance_max in luminosity_distances_max]
+    with multiprocessing.Pool(processes=processes) as pool:
+        redshifts_max = list(tqdm(pool.imap(z_at_value_partial, args), total=len(args)))
+
+    comoving_volumes_max = cosmo_model.comoving_volume(redshifts_max).value
+    weights = np.array(comoving_volumes / comoving_volumes_max)
+
+    # None if magnitude exceeds the limiting magnitude
+    weights[magnitudes > m_max] = None
+
+    return weights
+
+
+def number_counts_bins(data_dict, x_lim, step=.5, band='r', legend_loc='upper left'):
     band_column = get_mag_str(band)
     bins = np.arange(x_lim[0], x_lim[1] + step, step)
-    bin_titles = ['({}, {}]'.format(bins[i], bins[i + 1]) for i, _ in enumerate(bins[:-1])]
+    # bin_titles = ['({}, {}]'.format(bins[i], bins[i + 1]) for i, _ in enumerate(bins[:-1])]
+    bin_titles = ['{}]'.format(bin) for bin in bins[1:]]
 
     counts = pd.DataFrame()
     for data_name, data in data_dict.items():
@@ -459,30 +538,6 @@ def number_counts_multidata(data_dict, x_lim, step=.5, band='r', legend_loc='upp
     plt.xticks(rotation=30)
     plt.ylabel('counts per bin')
     plt.yscale('log')
-
-
-def number_counts_linear(data, c=10, linear_range=(18, 20), columns=BAND_COLUMNS):
-    for b in columns:
-
-        m_min = int(math.ceil(data[b].min()))
-        m_max = int(math.ceil(data[b].max()))
-
-        x, y = [], []
-        for m in range(m_min, m_max + 1):
-            x.append(m)
-            v = data.loc[data[b] < m].shape[0]
-            if v != 0:
-                v = math.log(v, 10)
-            y.append(v)
-
-        plt.plot(x, y, label=b)
-
-    x_linear = np.arange(linear_range[0], linear_range[1] + 0.1, 0.1)
-    y_linear = [0.6 * m - c for m in x_linear]
-    plt.plot(x_linear, y_linear, label='0.6 * m - {}'.format(c))
-    plt.xlabel('m')
-    plt.ylabel('log N(≤ m)')
-    plt.legend()
 
 
 # nside 58 gives 1.02 sq. deg.

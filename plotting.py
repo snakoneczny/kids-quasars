@@ -32,9 +32,11 @@ LINE_STYLES = ['-', '--', '-.', ':']
 
 LABELS_ORDER = [
     'safe',
+    'safe, r < 22'
     'extrapolation',
-    'extrapolation, r <= 23',
-    'extrapolation, r > 23',
+    'extrapolation, r in (22, 23)',
+    'extrapolation, r in (23, 24)',
+    'extrapolation, r > 24',
     'unsafe',
     'QSO',
     'QSO_PHOTO',
@@ -126,12 +128,16 @@ def make_embedding_plots(data, legend_loc='lower right'):
         plot_embedding(embedding, data['subset'], label='inference subset', legend_loc=legend_loc)
     if 'CLASS_PHOTO' in data:
         plot_embedding(embedding, data['CLASS_PHOTO'], label='photo class', legend_loc=legend_loc)
-        plot_embedding(embedding, data['QSO_PHOTO'], label='QSO proba', is_continuous=True, legend_loc=legend_loc)
-    if 'Z_PHOTO' in data:
-        plot_embedding(embedding, data['Z_PHOTO'], label='photo z', is_continuous=True, legend_loc=legend_loc)
-    if 'Z_PHOTO_STDDEV' in data:
-        plot_embedding(embedding, data['Z_PHOTO_STDDEV'], label='photo z uncertainity', is_continuous=True,
+        plot_embedding(embedding, data['QSO_PHOTO'], label='photometric QSO probability', is_continuous=True,
                        legend_loc=legend_loc)
+    if 'Z_PHOTO' in data:
+        idx = (data['CLASS_PHOTO'] == 'QSO')
+        plot_embedding(embedding[idx], data.loc[idx]['Z_PHOTO'], label='photo z',
+                       is_continuous=True, legend_loc=legend_loc)
+    if 'Z_PHOTO_STDDEV' in data:
+        idx = (data['CLASS_PHOTO'] == 'QSO')
+        plot_embedding(embedding[idx], data.loc[idx]['Z_PHOTO_STDDEV'],
+                       label='photo z uncertainity', is_continuous=True, legend_loc=legend_loc)
     if 'is_train' in data:
         plot_embedding(embedding, data['is_train'], label='used in training', legend_loc=legend_loc)
 
@@ -174,7 +180,8 @@ def plot_confusion_matrix(cm, classes, normalize=False, title='SDSS'):
         cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis] * 100
 
     cmap = sns.cubehelix_palette(light=.95, as_cmap=True)
-    plt.imshow(cm, interpolation='nearest', cmap=cmap)
+    with sns.axes_style('ticks'):
+        plt.imshow(cm, interpolation='nearest', cmap=cmap)
     plt.colorbar()
     tick_marks = np.arange(len(classes))
     plt.xticks(tick_marks, [get_plot_text(cls, is_photo=True) for cls in classes])
@@ -237,15 +244,14 @@ def plot_proba_histograms(data):
 
 
 def plot_histograms(data_dict, columns=BAND_COLUMNS, x_lim_dict=None, title=None, pretty_print_function=None,
-                    legend_loc='upper left', legend_size=None, norm_hist=True, log_y=False, vlines=None):
+                    legend_loc='upper left', legend_size=None, norm_hist=True, log_y=False, vlines=None, bins=None):
     color_palette = get_cubehelix_palette(len(data_dict))
-    sns.set_style('whitegrid')
     for column in columns:
 
         plt.figure()
         for i, (label, data) in enumerate(data_dict.items()):
             ax = sns.distplot(data[column], label=label, kde=False, rug=False, norm_hist=norm_hist,
-                              color=color_palette[i],
+                              color=color_palette[i], bins=bins,
                               hist_kws={'alpha': 1.0, 'histtype': 'step', 'linewidth': 1.5,
                                         'linestyle': get_line_style(i)})
             if log_y: ax.set_yscale('log')

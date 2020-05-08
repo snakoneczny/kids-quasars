@@ -321,35 +321,34 @@ def process_gaia(data, parallax_error=1, pm_error=None, parallax_lim=None, pm_li
     # Get 5 position observations (parallax should be enough)
     movement_mask = ~data[['parallax']].isnull().any(axis=1)
     data = data.loc[movement_mask]
-    if with_print: print('5 position shape: {}'.format(data.shape))
+    if with_print:
+        print('5 position shape: {}'.format(data.shape))
 
     data = norm_gaia_observations(data)
-    data = clean_gaia(data, parallax_error=parallax_error, pm_error=pm_error, parallax_lim=parallax_lim, pm_lim=pm_lim,
-                      with_print=with_print)
+    data = clean_gaia(data, parallax_error=parallax_error, pm_error=pm_error, parallax_lim=parallax_lim, pm_lim=pm_lim)
     return data
 
 
-# TODO: use logger instead of printing
-def clean_gaia(data, parallax_error=1, pm_error=None, parallax_lim=None, pm_lim=None, with_print=True):
+def clean_gaia(data, parallax_error=1, pm_error=None, parallax_lim=None, pm_lim=None):
     if parallax_error:
         data = data.loc[data['parallax_error'] < parallax_error]
-        if with_print: print('Removing paralax_error shape: {}'.format(data.shape))
+        print('Removing paralax_error: {}'.format(data.shape))
 
     if pm_error:
         data = data.loc[data['pmra_error'] < pm_error]
-        if with_print: print('Removing pmra_error shape: {}'.format(data.shape))
+        print('Removing pmra_error: {}'.format(data.shape))
 
         data = data.loc[data['pmdec_error'] < pm_error]
-        if with_print: print('Removing pmdec_error shape: {}'.format(data.shape))
+        print('Removing pmdec_error: {}'.format(data.shape))
 
     if parallax_lim:
         data = data.loc[(data['parallax'] > parallax_lim[0]) & (data['parallax'] < parallax_lim[1])]
-        if with_print: print('Removing parallax_norm shape: {}'.format(data.shape))
+        print('Removing limiting parallax: {}'.format(data.shape))
 
     if pm_lim:
         proper_motion_mask = (data['pmra'].pow(2) + data['pmdec'].pow(2) < pm_lim)
         data = data.loc[proper_motion_mask]
-        if with_print: print('Removing pmra_norm and pmdec_norm shape: {}'.format(data.shape))
+        print('Removing limiting pmra and pmdec: {}'.format(data.shape))
 
     return data
 
@@ -390,37 +389,39 @@ def merge_specialized_catalogs(ctlg_clf, ctlg_z_qso, ctlg_z_galaxy=None):
     return catalog
 
 
-def add_subset_info(kids, extra_info=False):
-    cs_safe_idx = (kids['CLASS_STAR'] > 0.8) | (kids['CLASS_STAR'] < 0.2)
+def add_subset_info(data, extra_info=False):
+    cs_safe_idx = (data['CLASS_STAR'] > 0.8) | (data['CLASS_STAR'] < 0.2)
     if extra_info:
         subsets_idx = [
-            ('extrapolation, r > 23', cs_safe_idx & (kids['MAG_GAAP_r'] > 23)),
-            ('extrapolation, r <= 23', cs_safe_idx & (kids['MAG_GAAP_r'] <= 23)),
-            ('safe', cs_safe_idx & (kids['MAG_GAAP_r'] < 22)),
+            ('extrapolation, r in (24, 25)', cs_safe_idx & (data['MAG_GAAP_r'] < 25)),
+            ('extrapolation, r in (23, 24)', cs_safe_idx & (data['MAG_GAAP_r'] < 24)),
+            ('extrapolation, r in (22, 23)', cs_safe_idx & (data['MAG_GAAP_r'] < 23)),
+            ('safe, r < 22', cs_safe_idx & (data['MAG_GAAP_r'] < 22)),
         ]
     else:
         subsets_idx = [
-            ('extrapolation', cs_safe_idx),
-            ('safe', cs_safe_idx & (kids['MAG_GAAP_r'] < 22)),
+            ('extrapolation', cs_safe_idx & (data['MAG_GAAP_r'] < 25)),
+            ('safe', cs_safe_idx & (data['MAG_GAAP_r'] < 22)),
         ]
-    kids['subset'] = 'unsafe'
+    data['subset'] = 'unsafe'
     for subset_name, subset_idx in subsets_idx:
-        kids.loc[subset_idx, 'subset'] = subset_name
-    return kids
+        data.loc[subset_idx, 'subset'] = subset_name
+    return data
 
 
-def get_inference_subsets(kids):
-    kids = add_subset_info(kids)
+def get_joint_inference_subsets(data):
+    data = add_subset_info(data)
     subsets = OrderedDict([
-        ('KiDS', kids),
-        ('KiDS extrapolation', kids.loc[kids['subset'].isin(['safe', 'extrapolation'])]),
-        ('KiDS safe', kids.loc[kids['subset'] == 'safe']),
+        ('KiDS', data),
+        ('KiDS extrapolation', data.loc[data['subset'].isin(['safe', 'extrapolation'])]),
+        ('KiDS safe', data.loc[data['subset'] == 'safe']),
     ])
     return subsets
 
 
-def get_disjoint_inference_subsets(kids):
-    kids = add_subset_info(kids)
+def get_inference_subsets(data):
+    data = add_subset_info(data)
     subsets = OrderedDict(
-        [(subset_name, kids.loc[kids['subset'] == subset_name]) for subset_name in ['unsafe', 'extrapolation', 'safe']])
+        [(subset_name, data.loc[data['subset'] == subset_name]) for subset_name in
+         ['safe', 'extrapolation', 'unsafe']])
     return subsets

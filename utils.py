@@ -39,7 +39,7 @@ def safe_indexing(X, indices):
     """
     if hasattr(X, "iloc"):
         # Work-around for indexing with read-only indices in pandas
-        indices = indices if indices.flags.writeable else indices.copy()
+        indices = indices.copy()  # if indices.flags.writeable else indices.copy()
         # Pandas Dataframes and Series
         try:
             return X.iloc[indices]
@@ -170,7 +170,7 @@ def pretty_print_feature(str):
 
 
 def pretty_print_magnitude(str):
-    return str.split('_')[-1] + ' magnitude'
+    return r'$\it{' + str.split('_')[-1] + r'}$ magnitude'
 
 
 def pretty_print_mags_combination(str):
@@ -206,14 +206,17 @@ def save_model(model, exp_name, timestamp):
     logger.info('model saved to: {}'.format(model_path))
 
 
-# TODO: Save fits file
+def save_fits(data, file_path):
+    astropy_table = Table.from_pandas(data)
+    astropy_table.write(file_path)
+
+
 def save_catalog(catalog, exp_name, timestamp):
     logger.info('saving catalog..')
     catalog_path = path.join(DATA_PATH, 'KiDS/DR4/catalogs/{exp_name}__{timestamp}.fits'.format(exp_name=exp_name,
                                                                                                 timestamp=timestamp))
 
-    astropy_table = Table.from_pandas(catalog)
-    astropy_table.write(catalog_path)
+    save_fits(catalog, catalog_path)
     logger.info('catalog saved to: {}'.format(catalog_path))
 
 
