@@ -1,4 +1,5 @@
 from collections.abc import Iterable
+from functools import partial
 
 import numpy as np
 import pandas as pd
@@ -7,7 +8,6 @@ from sklearn.preprocessing import MinMaxScaler
 from sklearn.base import BaseEstimator
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 from xgboost import XGBClassifier, XGBRegressor
-import tensorflow as tf
 import tensorflow_probability as tfp
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, Dropout
@@ -15,6 +15,8 @@ from tensorflow.keras.optimizers import Adam
 from tensorflow.keras import backend as K
 from tensorflow.keras.callbacks import Callback, TensorBoard, EarlyStopping, ModelCheckpoint
 from tensorflow.keras.utils import to_categorical
+
+from utils import save_epoch_predictions
 
 tfd = tfp.distributions
 
@@ -198,7 +200,7 @@ class AnnReg(BaseEstimator):
         self.params_exp = params
         self.network = None
         self.scaler = MinMaxScaler()
-        self.patience = 1000
+        self.patience = 3000
         self.batch_size = 256
         self.lr = 0.0001
         self.dropout_rate = 0.2
@@ -207,7 +209,7 @@ class AnnReg(BaseEstimator):
             exp_name=params['exp_name'], timestamp=params['timestamp_start'])
 
         self.metrics_dict = {
-            'mean_squared_error': mean_squared_error,
+            'root_mean_squared_error': partial(mean_squared_error, squared=False),
             'mean_absolute_error': mean_absolute_error,
         }
 
@@ -221,7 +223,7 @@ class AnnReg(BaseEstimator):
             else:
                 self.epochs = 1000
         else:
-            self.epochs = 5000
+            self.epochs = 20000
 
         base_name = 'z-{}'.format(params['specialization']).lower() if params['specialization'] else 'z'
         log_name = '{}, lr={}, bs={}, {}'.format(base_name, self.lr, self.batch_size,
@@ -234,7 +236,7 @@ class AnnReg(BaseEstimator):
             self.callbacks.append(ModelCheckpoint(self.model_path, monitor='val_loss', save_best_only=True,
                                                   save_weights_only=True, verbose=1))
         else:
-            self.callbacks.append(EarlyStopping(monitor='val_mean_squared_error', patience=self.patience,
+            self.callbacks.append(EarlyStopping(monitor='val_top_root_mean_squared_error', patience=self.patience,
                                                 restore_best_weights=True))
         if not self.params_exp['is_test']:
             self.callbacks.append(CustomTensorBoard(log_folder=log_name, params=self.params_exp,
@@ -258,18 +260,20 @@ class AnnReg(BaseEstimator):
         model.add(Dropout(self.dropout_rate))
         model.add(Dense(20, activation='relu'))
         model.add(Dropout(self.dropout_rate))
-        model.add(Dense(2))
-        model.add(tfp.layers.DistributionLambda(
-            lambda t: tfd.Normal(loc=t[..., :1],
-                                 scale=1e-3 + tf.math.softplus(0.05 * t[..., 1:])),
-            name='redshift',
-        ))
+
+        # model.add(Dense(2))
+        # model.add(tfp.layers.DistributionLambda(
+        #     lambda t: tfd.Normal(loc=t[..., :1],
+        #                          scale=1e-3 + tf.math.softplus(0.05 * t[..., 1:])),
+        #     name='redshift',
+        # ))
+        # negloglik = lambda y, p_y: -p_y.log_prob(y)
+        # loss = {'redshift': negloglik}
+
+        model.add(Dense(1, name='redshift'))
+        loss = 'mean_squared_error'
 
         opt = Adam(lr=self.lr)
-
-        negloglik = lambda y, p_y: -p_y.log_prob(y)
-        loss = {'redshift': negloglik}
-
         model.compile(loss=loss, optimizer=opt)
 
         return model
@@ -284,7 +288,9 @@ class AnnReg(BaseEstimator):
                                     validation_data_arr[i][2]) for i in range(len(validation_data_arr))]
 
             validation_callback = AdditionalValidationSets(
-                validation_data_arr, additional_metrics_dict=self.metrics_dict, model_wrapper=self)
+                validation_data_arr, self.params_exp, additional_metrics_dict=self.metrics_dict, model_wrapper=self,
+                save_preds=True
+            )
             self.callbacks = [validation_callback] + self.callbacks
 
             validation_data = (validation_data_arr[0][0], validation_data_arr[0][1])
@@ -301,25 +307,26 @@ class AnnReg(BaseEstimator):
             self.network.load_weights(self.model_path)
 
     def predict(self, X, encoder=None, batch_size=None, scale_data=True):
+        batch_size = self.batch_size if batch_size is None else batch_size
         X_to_pred = self.scaler.transform(X) if scale_data else X
         predictions_df = pd.DataFrame()
 
-        if batch_size:
-            indices = [(i + 1) * batch_size for i in range(int(X_to_pred.shape[0] / batch_size))]
-            batches = np.split(X_to_pred, indices, axis=0)
-            preds_arr = [self.network(batch) for batch in batches]
-        else:
-            raise(ValueError('Regression network requires batch size in prediction'))
+        indices = [(i + 1) * batch_size for i in range(int(X_to_pred.shape[0] / batch_size))]
+        batches = np.split(X_to_pred, indices, axis=0)
+        preds_arr = [self.network(batch) for batch in batches]
 
-        predictions_df['Z_PHOTO'] = np.concatenate([preds.mean() for preds in preds_arr])[:, 0]
-        predictions_df['Z_PHOTO_STDDEV'] = np.concatenate([preds.stddev() for preds in preds_arr])[:, 0]
+        # predictions_df['Z_PHOTO'] = np.concatenate([preds.mean() for preds in preds_arr])[:, 0]
+        # predictions_df['Z_PHOTO_STDDEV'] = np.concatenate([preds.stddev() for preds in preds_arr])[:, 0]
+
+        predictions_df.loc[:, 'Z_PHOTO'] = np.concatenate(preds_arr)[:, 0]
 
         return predictions_df
 
 
 class AdditionalValidationSets(Callback):
-    def __init__(self, validation_sets, tracked_metric_names=None, additional_metrics_dict=None, model_wrapper=None,
-                 verbose=0, batch_size=None):
+    def __init__(self, validation_sets, cfg, tracked_metric_names=None, additional_metrics_dict=None,
+                 model_wrapper=None,
+                 verbose=0, batch_size=None, save_preds=False):
         """
         :param validation_sets:
         a list of 3-tuples (validation_data, validation_targets, validation_set_name)
@@ -334,6 +341,7 @@ class AdditionalValidationSets(Callback):
         for validation_set in self.validation_sets:
             if len(validation_set) not in [2, 3]:
                 raise ValueError()
+        self.cfg = cfg
         self.epoch = []
         self.history = {}
         self.verbose = verbose
@@ -341,6 +349,7 @@ class AdditionalValidationSets(Callback):
         self.tracked_metric_names = tracked_metric_names
         self.additional_metrics_dict = additional_metrics_dict
         self.model_wrapper = model_wrapper
+        self.save_preds = save_preds
 
     def on_train_begin(self, logs=None):
         self.epoch = []
@@ -354,6 +363,7 @@ class AdditionalValidationSets(Callback):
             self.history.setdefault(k, []).append(v)
 
         # Evaluate on the additional validation sets
+        preds_df = pd.DataFrame()
         for validation_set in self.validation_sets:
             if len(validation_set) == 3:
                 validation_data, validation_targets, validation_set_name = validation_set
@@ -363,7 +373,7 @@ class AdditionalValidationSets(Callback):
             else:
                 raise ValueError()
 
-            # First, standard model evaluation on tracked metrics
+            # Standard model evaluation on tracked metrics
             results = self.model.evaluate(x=validation_data, y=validation_targets, verbose=self.verbose,
                                           sample_weight=sample_weights, batch_size=self.batch_size)
             if not isinstance(results, Iterable):
@@ -376,13 +386,21 @@ class AdditionalValidationSets(Callback):
                 self.history.setdefault(value_name, []).append(result)
                 logs[value_name] = result
 
-            # Second, additional metrics with custom predict function from model wrapper
-            if self.additional_metrics_dict:
-
-                # TODO: should not assume redshift (though it's never going to be anything else?)
+            # Make predictions
+            preds = None
+            if self.save_preds or self.additional_metrics_dict:
                 preds = self.model_wrapper.predict(validation_data, scale_data=False)
-                y_pred = preds['Z_PHOTO']
 
+            # Concatenate with the data frame to save
+            if self.save_preds:
+                # TODO: missing original data fields
+                preds['Z'] = validation_targets['redshift']
+                preds['test_subset'] = validation_set_name
+                preds_df = pd.concat([preds_df, preds], axis=0).reset_index(drop=True)
+
+            # Additional metrics with custom predict function from model wrapper
+            if self.additional_metrics_dict:
+                y_pred = preds['Z_PHOTO']
                 # print('\n{}: z std mean: {}'.format(validation_set_name, preds['Z_PHOTO_STDDEV'].mean()))
                 # print('{}: z std std: {}'.format(validation_set_name, preds['Z_PHOTO_STDDEV'].std()))
 
@@ -391,6 +409,14 @@ class AdditionalValidationSets(Callback):
                     value_name = 'val_{}_{}'.format(validation_set_name, metric_name)
                     self.history.setdefault(value_name, []).append(result)
                     logs[value_name] = result
+
+        # Store predictions after each epoch
+        if self.save_preds:
+            # TODO: missing some fields from original data
+            # catalog_df = pd.concat([data['ID'], preds], axis=1)
+            # catalog_df['is_train'] = catalog_df['ID'].isin(train_data['ID'])
+            save_epoch_predictions(preds_df, epoch, exp_name=self.cfg['exp_name'],
+                                   timestamp=self.cfg['timestamp_start'])
 
         super().on_epoch_end(epoch, logs)
 
@@ -403,7 +429,7 @@ class CustomTensorBoard(TensorBoard):
 
         self.params_exp = params
         self.main_test_name = 'top' if (
-                    params['test_method'] == 'magnitude' and not params['is_inference']) else 'random'
+                params['test_method'] == 'magnitude' and not params['is_inference']) else 'random'
 
     def on_epoch_end(self, epoch, logs=None):
         logs_to_send = logs.copy()
@@ -412,14 +438,14 @@ class CustomTensorBoard(TensorBoard):
         logs_to_send.update({'learning_rate': K.eval(self.model.optimizer.lr)})
 
         # TODO: if regression and negloglik copy val_loss to val_negloglik, hard to find better place
-        # Check if additional random validation sets present and put val_random on the same plot with train
+        # Check if additional random validation sets are present and put val_random on the same plot with train
         if any([log_name.startswith('val_random') for log_name in logs_to_send]):
             for key in list(logs_to_send):
                 # TODO: if val_loss != val_random_loss to val_random_loss -> val_loss
                 if key.startswith('val_random'):
                     key_1 = key.replace('val_random', 'val')
                     key_2 = key.replace('val_random', 'val_' + self.main_test_name)
-                    # Move loss used in training to it's proper name if not already done in validation
+                    # Move loss used in training to its proper name if not already done in validation
                     if key_1 in logs_to_send:
                         logs_to_send[key_2] = logs_to_send[key_1]
                     # Move random score in order to plot with training scores

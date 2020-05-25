@@ -39,8 +39,8 @@ def add_experiment_name(cfg):
     cfg['exp_name'] = '{model}_{problem}_f-{features}'.format(
         model=cfg['model'], problem=problem, features=cfg['features_key'])
 
-    if not cfg['is_inference']:
-        cfg['exp_name'] += '_test-{test}'.format(test=cfg['test_method'])
+    # if not cfg['is_inference']:
+    #     cfg['exp_name'] += '_test-{test}'.format(test=cfg['test_method'])
 
     if cfg['specialization']:
         cfg['exp_name'] += '_spec-{}'.format(cfg['specialization'].lower())

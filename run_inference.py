@@ -103,7 +103,7 @@ if cfg['model'] == 'ann':
 else:
     preds = get_single_problem_predictions(model, X, encoder, cfg)
 
-# TODO: Add position and magnitude to the catalog (check if memory allows)
+# TODO: Add ('RAJ2000', 'DECJ2000', 'MAG_GAAP_r', 'CLASS_STAR') to the catalog - check if memory allows
 # Store predictions
 catalog_df = pd.concat([data['ID'], preds], axis=1)
 catalog_df['is_train'] = catalog_df['ID'].isin(train_data['ID'])

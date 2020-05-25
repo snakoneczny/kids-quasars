@@ -1,6 +1,6 @@
 import logging
 import math
-from os import path
+import os
 
 import scipy
 import numpy as np
@@ -8,11 +8,17 @@ import pandas as pd
 from scipy import stats
 import joblib
 from astropy.table import Table
+import healpy as hp
 
 from env_config import DATA_PATH
 
 logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s', datefmt='%d/%m/%Y %H:%M:%S', level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+kids_north_coverage = 374.6704
+kids_south_coverage = 402.61348
+kids_coverage = kids_north_coverage + kids_south_coverage  # 777.28388
+qso_sdss_coverage = 9376
 
 
 def safe_indexing(X, indices):
@@ -61,21 +67,24 @@ def safe_indexing(X, indices):
         return [X[idx] for idx in indices]
 
 
-def get_map(l, b, nside=128):
+def get_map(l, b, v=None, nside=128):
     # Set the number of sources and the coordinates for the input
     npix = hp.nside2npix(nside)  # 12 * nside ^ 2
 
     # Coordinates and the density field f
-    phis = l / 180. * math.pi
-    thetas = (-1. * b + 90.) / 180. * math.pi
+    thetas, phis = np.radians(-b + 90.), np.radians(360. - l)
+    # phis = l / 180. * math.pi
+    # thetas = (-1. * b + 90.) / 180. * math.pi
 
     # Initate the map and fill it with the values
     hpxmap = np.zeros(npix, dtype=np.float)
 
     # Go from HEALPix coordinates to indices
     indices = hp.ang2pix(nside, thetas, phis, nest=False)
-    for i in indices:
-        hpxmap[i] += 1
+    for i, j in enumerate(indices):
+        # Add objects weight or store a count
+        v_i = v[i] if v is not None else 1
+        hpxmap[j] += v_i
 
     lon, lat = hp.pixelfunc.pix2ang(nside, range(npix), nest=False, lonlat=True)
 
@@ -170,7 +179,14 @@ def pretty_print_feature(str):
 
 
 def pretty_print_magnitude(str):
-    return r'$\it{' + str.split('_')[-1] + r'}$ magnitude'
+    splitted = str.split('_')
+    if splitted[0] == 'MAG' and splitted[1] == 'GAAP':
+        mag = splitted[-1]
+    elif splitted[-1] == 'PSFMAG':
+        mag = splitted[0]
+    else:
+        return str
+    return r'$\it{' + mag + r'}$ magnitude'
 
 
 def pretty_print_mags_combination(str):
@@ -198,6 +214,17 @@ def save_predictions(predictions_df, exp_name, timestamp):
     logger.info('predictions saved to: {}'.format(predictions_path))
 
 
+def save_epoch_predictions(predictions_df, epoch, exp_name, timestamp):
+    base_name = '{exp_name}__{timestamp}'.format(exp_name=exp_name, timestamp=timestamp)
+    folder_path = 'outputs/exp_epoch_preds/{base_name}'.format(base_name=base_name)
+    predictions_path = '{folder_path}/{base_name}__epoch-{epoch}.csv'.format(folder_path=folder_path,
+                                                                             base_name=base_name, epoch=epoch)
+    if not os.path.exists(folder_path):
+        os.mkdir(folder_path)
+    predictions_df.to_csv(predictions_path, index=False)
+    logger.info('predictions saved to: {}'.format(predictions_path))
+
+
 def save_model(model, exp_name, timestamp):
     # TODO: neural net saving
     model_path = 'outputs/exp_models/{exp_name}__{timestamp}.joblib'.format(exp_name=exp_name,
@@ -213,7 +240,7 @@ def save_fits(data, file_path):
 
 def save_catalog(catalog, exp_name, timestamp):
     logger.info('saving catalog..')
-    catalog_path = path.join(DATA_PATH, 'KiDS/DR4/catalogs/{exp_name}__{timestamp}.fits'.format(exp_name=exp_name,
+    catalog_path = os.path.join(DATA_PATH, 'KiDS/DR4/catalogs/{exp_name}__{timestamp}.fits'.format(exp_name=exp_name,
                                                                                                 timestamp=timestamp))
 
     save_fits(catalog, catalog_path)
@@ -231,3 +258,10 @@ def assign_redshift(preds_clf, preds_z_qso, preds_z_galaxy):
         # Star
         preds_clf.loc[preds_clf[class_column] == 'STAR', 'Z_PHOTO' + column_suffix] = 0
     return preds_clf
+
+
+def add_shape_info(data):
+    data['shape'] = 'not known'
+    data.loc[data['CLASS_STAR'] < 0.2, 'shape'] = 'extended'
+    data.loc[data['CLASS_STAR'] > 0.8, 'shape'] = 'point'
+    return data

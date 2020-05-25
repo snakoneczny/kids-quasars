@@ -29,6 +29,7 @@ CUSTOM_COLORS = {
 }
 
 LINE_STYLES = ['-', '--', '-.', ':']
+MARKERS = ['o', 'x', 's', '+', 'p', 'h', 'H']
 
 LABELS_ORDER = [
     'safe',
@@ -81,10 +82,19 @@ def get_line_style(i):
     return LINE_STYLES[i % len(LINE_STYLES)]
 
 
-def get_cubehelix_palette(n):
+def get_markers(n):
+    return MARKERS[:n]
+
+
+def get_marker(i):
+    return MARKERS[i % len(MARKERS)]
+
+
+def get_cubehelix_palette(n, reverse=True):
     n_color = 2 if n == 1 else n
     palette = sns.color_palette('cubehelix', n_color)
-    palette.reverse()
+    if reverse:
+        palette.reverse()
     if n == 1:
         return palette[1:]
     else:
@@ -254,7 +264,8 @@ def plot_histograms(data_dict, columns=BAND_COLUMNS, x_lim_dict=None, title=None
                               color=color_palette[i], bins=bins,
                               hist_kws={'alpha': 1.0, 'histtype': 'step', 'linewidth': 1.5,
                                         'linestyle': get_line_style(i)})
-            if log_y: ax.set_yscale('log')
+            if log_y:
+                ax.set_yscale('log')
 
         if x_lim_dict and column in x_lim_dict:
             plt.xlim(x_lim_dict[column][0], x_lim_dict[column][1])
@@ -268,8 +279,6 @@ def plot_histograms(data_dict, columns=BAND_COLUMNS, x_lim_dict=None, title=None
         y_label = 'counts per bin'
         if norm_hist:
             y_label = 'normalized ' + y_label
-        if log_y:
-            y_label = 'log ' + y_label
         plt.ylabel(y_label)
 
         prop = {'size': legend_size} if legend_size else {}
