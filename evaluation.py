@@ -220,47 +220,31 @@ def redshift_scatter_plots(predictions, z_max):
     # Plot true vs predicted redshifts
     z_photo_col = 'Z_PHOTO_WSPEC' if 'Z_PHOTO_WSPEC' in predictions else 'Z_PHOTO'
     z_photo_stddev_col = 'Z_PHOTO_STDDEV_WSPEC' if 'Z_PHOTO_STDDEV_WSPEC' in predictions else 'Z_PHOTO_STDDEV'
-    plot_z_true_vs_pred(predictions, z_photo_col, z_max, z_photo_stddev_col)
-
-
-def plot_z_true_vs_pred(predictions, z_pred_col, z_max, z_pred_stddev_col=None):
     z_max = {'GALAXY': min(1, z_max), 'QSO': z_max}
     for c in ['QSO']:
         preds_c = predictions.loc[predictions['CLASS'] == c]
-        colors = preds_c[z_pred_stddev_col] if z_pred_stddev_col in preds_c else None
+        redshift_scatter_plot(preds_c, z_photo_col, z_max[c], z_pred_stddev_col=z_photo_stddev_col, title=c)
 
-        # Get sizes based on density
-        # kde = stats.kde.gaussian_kde([preds_c['Z'], preds_c[z_pred_col]])
-        # densities = kde([preds_c['Z'], preds_c[z_pred_col]])
-        # min_val = densities.min()
-        # max_val = densities.max()
-        # preds_c.loc[:, 'size'] = ((densities - min_val) / (max_val - min_val)) * 60 + 20
 
-        # Scatter plot with uncertainty as color and density as size
-        f, ax = plt.subplots()
-        # points = ax.scatter(preds_c['Z'], preds_c[z_pred_col], s=preds_c['size'], c=colors, cmap='rainbow_r', alpha=0.6,
-        #                     edgecolors='w')
-        points = ax.scatter(preds_c['Z'], preds_c[z_pred_col], c=colors, cmap='rainbow_r', alpha=0.2)
-        plt.plot(range(z_max[c] + 1))
-        ax.set(xlim=(0, z_max[c]), ylim=(0, z_max[c]))
-        plt.xlabel(get_plot_text('Z'))
-        plt.ylabel(get_plot_text(z_pred_col))
-        plt.title(get_plot_text(c))
-        if z_pred_stddev_col in preds_c:
-            cb = f.colorbar(points)
-            cb.set_label(get_plot_text(z_pred_stddev_col))
+def redshift_scatter_plot(predictions, z_pred_col, z_max, z_pred_stddev_col=None, title=None, return_fig=False):
+    colors = predictions[z_pred_stddev_col] if z_pred_stddev_col in predictions else None
+
+    # Scatter plot with uncertainty as color and density as size
+    f, ax = plt.subplots()
+    points = ax.scatter(predictions['Z'], predictions[z_pred_col], c=colors, cmap='rainbow_r', alpha=0.2)
+    plt.plot(range(z_max + 1))
+    ax.set(xlim=(0, z_max), ylim=(0, z_max))
+    plt.xlabel(get_plot_text('Z'))
+    plt.ylabel(get_plot_text(z_pred_col))
+    plt.title(get_plot_text(title))
+    if z_pred_stddev_col in predictions:
+        cb = f.colorbar(points)
+        cb.set_label(get_plot_text(z_pred_stddev_col))
+
+    if return_fig:
+        return f
+    else:
         plt.show()
-
-        # Standalone density plot
-        # plt.figure()
-        # ax = sns.kdeplot(preds_c['Z'], preds_c[z_pred_col], shade=True)
-        # ax.collections[0].set_alpha(0)
-        # plt.plot(range(z_max[c] + 1))
-        # ax.set(xlim=(0, z_max[c]), ylim=(0, z_max[c]))
-        # plt.xlabel(get_plot_text('Z'))
-        # plt.ylabel(get_plot_text(z_pred_col))
-        # plt.title(get_plot_text(c))
-        # plt.show()
 
 
 def plot_z_hists(preds, z_max=None):

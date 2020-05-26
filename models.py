@@ -8,6 +8,7 @@ from sklearn.preprocessing import MinMaxScaler
 from sklearn.base import BaseEstimator
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 from xgboost import XGBClassifier, XGBRegressor
+import tensorflow as tf
 import tensorflow_probability as tfp
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, Dropout
@@ -16,7 +17,8 @@ from tensorflow.keras import backend as K
 from tensorflow.keras.callbacks import Callback, TensorBoard, EarlyStopping, ModelCheckpoint
 from tensorflow.keras.utils import to_categorical
 
-from utils import save_epoch_predictions
+from utils import plot_to_image
+from evaluation import redshift_scatter_plot
 
 tfd = tfp.distributions
 
@@ -95,6 +97,7 @@ def build_xgb_reg(params):
         raise Exception('Not implemented redshift specialization: {}'.format(params['specialization']))
 
 
+# TODO: extract common parts with ANN regression
 class AnnClf(BaseEstimator):
 
     def __init__(self, params):
@@ -202,8 +205,10 @@ class AnnReg(BaseEstimator):
         self.scaler = MinMaxScaler()
         self.patience = 3000
         self.batch_size = 256
-        self.lr = 0.0001
+        self.lr = 0.001
         self.dropout_rate = 0.2
+        self.callbacks = []
+        self.tensorboard_callback = None
 
         self.model_path = 'outputs/inf_models/{exp_name}__{timestamp}.hdf5'.format(
             exp_name=params['exp_name'], timestamp=params['timestamp_start'])
@@ -231,7 +236,6 @@ class AnnReg(BaseEstimator):
         if params['tag']:
             log_name = '{}, {}'.format(params['tag'], log_name)
 
-        self.callbacks = []
         if self.params_exp['is_inference']:
             self.callbacks.append(ModelCheckpoint(self.model_path, monitor='val_loss', save_best_only=True,
                                                   save_weights_only=True, verbose=1))
@@ -239,8 +243,9 @@ class AnnReg(BaseEstimator):
             self.callbacks.append(EarlyStopping(monitor='val_top_root_mean_squared_error', patience=self.patience,
                                                 restore_best_weights=True))
         if not self.params_exp['is_test']:
-            self.callbacks.append(CustomTensorBoard(log_folder=log_name, params=self.params_exp,
-                                                    is_inference=self.params_exp['is_inference']))
+            self.tensorboard_callback = CustomTensorBoard(log_folder=log_name, params=self.params_exp,
+                                                          is_inference=self.params_exp['is_inference'])
+            self.callbacks.append(self.tensorboard_callback)
 
     def create_network(self, params):
         model = Sequential()
@@ -289,7 +294,7 @@ class AnnReg(BaseEstimator):
 
             validation_callback = AdditionalValidationSets(
                 validation_data_arr, self.params_exp, additional_metrics_dict=self.metrics_dict, model_wrapper=self,
-                save_preds=True
+                tensorboard_callback=self.tensorboard_callback
             )
             self.callbacks = [validation_callback] + self.callbacks
 
@@ -325,8 +330,7 @@ class AnnReg(BaseEstimator):
 
 class AdditionalValidationSets(Callback):
     def __init__(self, validation_sets, cfg, tracked_metric_names=None, additional_metrics_dict=None,
-                 model_wrapper=None,
-                 verbose=0, batch_size=None, save_preds=False):
+                 model_wrapper=None, batch_size=None, tensorboard_callback=None, verbose=0):
         """
         :param validation_sets:
         a list of 3-tuples (validation_data, validation_targets, validation_set_name)
@@ -349,7 +353,7 @@ class AdditionalValidationSets(Callback):
         self.tracked_metric_names = tracked_metric_names
         self.additional_metrics_dict = additional_metrics_dict
         self.model_wrapper = model_wrapper
-        self.save_preds = save_preds
+        self.tensorboard_callback = tensorboard_callback
 
     def on_train_begin(self, logs=None):
         self.epoch = []
@@ -363,7 +367,6 @@ class AdditionalValidationSets(Callback):
             self.history.setdefault(k, []).append(v)
 
         # Evaluate on the additional validation sets
-        preds_df = pd.DataFrame()
         for validation_set in self.validation_sets:
             if len(validation_set) == 3:
                 validation_data, validation_targets, validation_set_name = validation_set
@@ -387,45 +390,39 @@ class AdditionalValidationSets(Callback):
                 logs[value_name] = result
 
             # Make predictions
-            preds = None
-            if self.save_preds or self.additional_metrics_dict:
-                preds = self.model_wrapper.predict(validation_data, scale_data=False)
+            predictions = self.model_wrapper.predict(validation_data, scale_data=False)
+            predictions['Z'] = validation_targets['redshift']
 
-            # Concatenate with the data frame to save
-            if self.save_preds:
-                # TODO: missing original data fields
-                preds['Z'] = validation_targets['redshift']
-                preds['test_subset'] = validation_set_name
-                preds_df = pd.concat([preds_df, preds], axis=0).reset_index(drop=True)
+            # Log scatter plot or confusion matrix
+            if self.tensorboard_callback:
+                self.log_redshift_scatter(epoch, predictions, validation_set_name)
 
             # Additional metrics with custom predict function from model wrapper
             if self.additional_metrics_dict:
-                y_pred = preds['Z_PHOTO']
-                # print('\n{}: z std mean: {}'.format(validation_set_name, preds['Z_PHOTO_STDDEV'].mean()))
-                # print('{}: z std std: {}'.format(validation_set_name, preds['Z_PHOTO_STDDEV'].std()))
-
                 for metric_name, metric_func in self.additional_metrics_dict.items():
-                    result = metric_func(validation_targets['redshift'], y_pred)
+                    result = metric_func(validation_targets['redshift'], predictions['Z_PHOTO'])
                     value_name = 'val_{}_{}'.format(validation_set_name, metric_name)
                     self.history.setdefault(value_name, []).append(result)
                     logs[value_name] = result
 
-        # Store predictions after each epoch
-        if self.save_preds:
-            # TODO: missing some fields from original data
-            # catalog_df = pd.concat([data['ID'], preds], axis=1)
-            # catalog_df['is_train'] = catalog_df['ID'].isin(train_data['ID'])
-            save_epoch_predictions(preds_df, epoch, exp_name=self.cfg['exp_name'],
-                                   timestamp=self.cfg['timestamp_start'])
-
         super().on_epoch_end(epoch, logs)
+
+    def log_redshift_scatter(self, epoch, predictions, test_name):
+        log_dir = self.tensorboard_callback.log_dir + '/validation'
+        file_writer = tf.summary.create_file_writer(log_dir)
+        scatter_plot = redshift_scatter_plot(predictions, z_pred_col='Z_PHOTO', z_max=4, z_pred_stddev_col=None,
+                                             return_fig=True)
+        scatter_image = plot_to_image(scatter_plot)
+        with file_writer.as_default():
+            tf.summary.image('redshift scatter - {}'.format(test_name), scatter_image, step=epoch)
 
 
 class CustomTensorBoard(TensorBoard):
     def __init__(self, log_folder, params, is_inference):
+        self.log_folder = log_folder
         subfolder = 'inf' if is_inference else 'exp'
-        log_dir = './outputs/tensorboard/{}/{}'.format(subfolder, log_folder)
-        super().__init__(log_dir=log_dir, profile_batch=0)
+        self.log_dir = './outputs/tensorboard/{}/{}'.format(subfolder, log_folder)
+        super().__init__(log_dir=self.log_dir, profile_batch=0)
 
         self.params_exp = params
         self.main_test_name = 'top' if (

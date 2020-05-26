@@ -72,6 +72,8 @@ PLOT_TEXTS = {
 
 
 def get_plot_text(str, is_photo=False):
+    if not str:
+        return None
     plot_text = PLOT_TEXTS[str]
     if is_photo:
         plot_text = plot_text.replace('spec', 'photo')

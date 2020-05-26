@@ -1,6 +1,7 @@
 import logging
 import math
 import os
+import io
 
 import scipy
 import numpy as np
@@ -9,6 +10,8 @@ from scipy import stats
 import joblib
 from astropy.table import Table
 import healpy as hp
+import matplotlib.pyplot as plt
+import tensorflow as tf
 
 from env_config import DATA_PATH
 
@@ -214,17 +217,6 @@ def save_predictions(predictions_df, exp_name, timestamp):
     logger.info('predictions saved to: {}'.format(predictions_path))
 
 
-def save_epoch_predictions(predictions_df, epoch, exp_name, timestamp):
-    base_name = '{exp_name}__{timestamp}'.format(exp_name=exp_name, timestamp=timestamp)
-    folder_path = 'outputs/exp_epoch_preds/{base_name}'.format(base_name=base_name)
-    predictions_path = '{folder_path}/{base_name}__epoch-{epoch}.csv'.format(folder_path=folder_path,
-                                                                             base_name=base_name, epoch=epoch)
-    if not os.path.exists(folder_path):
-        os.mkdir(folder_path)
-    predictions_df.to_csv(predictions_path, index=False)
-    logger.info('predictions saved to: {}'.format(predictions_path))
-
-
 def save_model(model, exp_name, timestamp):
     # TODO: neural net saving
     model_path = 'outputs/exp_models/{exp_name}__{timestamp}.joblib'.format(exp_name=exp_name,
@@ -241,7 +233,7 @@ def save_fits(data, file_path):
 def save_catalog(catalog, exp_name, timestamp):
     logger.info('saving catalog..')
     catalog_path = os.path.join(DATA_PATH, 'KiDS/DR4/catalogs/{exp_name}__{timestamp}.fits'.format(exp_name=exp_name,
-                                                                                                timestamp=timestamp))
+                                                                                                   timestamp=timestamp))
 
     save_fits(catalog, catalog_path)
     logger.info('catalog saved to: {}'.format(catalog_path))
@@ -265,3 +257,19 @@ def add_shape_info(data):
     data.loc[data['CLASS_STAR'] < 0.2, 'shape'] = 'extended'
     data.loc[data['CLASS_STAR'] > 0.8, 'shape'] = 'point'
     return data
+
+
+def plot_to_image(figure):
+    """Converts the matplotlib plot specified by 'figure' to a PNG image and
+    returns it. The supplied figure is closed and inaccessible after this call."""
+    # Save the plot to a PNG in memory.
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png')
+    # Closing the figure prevents it from being displayed directly inside the notebook.
+    plt.close(figure)
+    buf.seek(0)
+    # Convert PNG buffer to TF image
+    image = tf.image.decode_png(buf.getvalue(), channels=4)
+    # Add the batch dimension
+    image = tf.expand_dims(image, 0)
+    return image
