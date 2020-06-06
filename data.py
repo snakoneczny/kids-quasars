@@ -152,6 +152,8 @@ def process_kids(path, columns=None, bands=BANDS, kids_cleaning=True, sdss_clean
     else:
         raise (Exception('Not supported file type {} in {}'.format(extension, path)))
 
+    # TODO: update with KiDS DR4.1
+
     return process_kids_data(data, bands=bands, kids_cleaning=kids_cleaning, sdss_cleaning=sdss_cleaning, cut=cut,
                              with_print=with_print)
 

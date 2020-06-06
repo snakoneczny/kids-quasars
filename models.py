@@ -6,7 +6,7 @@ import pandas as pd
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.base import BaseEstimator
-from sklearn.metrics import mean_squared_error, mean_absolute_error
+from sklearn.metrics import mean_squared_error, mean_absolute_error, confusion_matrix
 from xgboost import XGBClassifier, XGBRegressor
 import tensorflow as tf
 import tensorflow_probability as tfp
@@ -19,6 +19,7 @@ from tensorflow.keras.utils import to_categorical
 
 from utils import plot_to_image
 from evaluation import redshift_scatter_plot
+from plotting import plot_confusion_matrix
 
 tfd = tfp.distributions
 
@@ -98,26 +99,29 @@ def build_xgb_reg(params):
 
 
 # TODO: extract common parts with ANN regression
+# TODO: move encoder to the network
 class AnnClf(BaseEstimator):
 
     def __init__(self, params):
         self.params_exp = params
         self.network = None
         self.scaler = MinMaxScaler()
-        self.patience = 1000
-        self.batch_size = 256
+        self.patience = 300
+        self.batch_size = 512
         self.lr = 0.0001
-        self.dropout_rate = 0.2
-        self.metric_names = ['categorical_crossentropy', 'accuracy']
+        self.dropout_rate = 0.05
+        self.metric_names = ['accuracy']
         self.model_path = 'outputs/inf_models/{exp_name}__{timestamp}.hdf5'.format(
             exp_name=params['exp_name'], timestamp=params['timestamp_start'])
+        self.callbacks = []
+        self.tensorboard_callback = None
 
         if params['is_test']:
             self.epochs = 10
         elif params['is_inference']:
             self.epochs = 400
         else:
-            self.epochs = 4000
+            self.epochs = 20000
 
         log_name = 'clf, lr={}, bs={}, {}'.format(self.lr, self.batch_size, params['timestamp_start'].replace('_', ' '))
         if params['tag']:
@@ -132,28 +136,23 @@ class AnnClf(BaseEstimator):
                                                 restore_best_weights=True))
 
         if not self.params_exp['is_test']:
-            pass
-            self.callbacks.append(CustomTensorBoard(log_folder=log_name, params=self.params_exp,
-                                                    is_inference=self.params_exp['is_inference']))
+            self.tensorboard_callback = CustomTensorBoard(log_folder=log_name, params=self.params_exp,
+                                                          is_inference=self.params_exp['is_inference'])
+            self.callbacks.append(self.tensorboard_callback)
 
     def create_network(self, params):
         model = Sequential()
-        model.add(Dense(100, input_dim=params['n_features'], activation='relu'))
+        model.add(Dense(128, activation='relu', input_dim=params['n_features']))
         model.add(Dropout(self.dropout_rate))
-        model.add(Dense(100, activation='relu'))
+        model.add(Dense(128, activation='relu'))
         model.add(Dropout(self.dropout_rate))
-        model.add(Dense(80, activation='relu'))
+        model.add(Dense(128, activation='relu'))
         model.add(Dropout(self.dropout_rate))
-        model.add(Dense(80, activation='relu'))
+        model.add(Dense(128, activation='relu'))
         model.add(Dropout(self.dropout_rate))
-        model.add(Dense(40, activation='relu'))
+        model.add(Dense(128, activation='relu'))
         model.add(Dropout(self.dropout_rate))
-        model.add(Dense(40, activation='relu'))
-        model.add(Dropout(self.dropout_rate))
-        model.add(Dense(20, activation='relu'))
-        model.add(Dropout(self.dropout_rate))
-        model.add(Dense(20, activation='relu'))
-        model.add(Dropout(self.dropout_rate))
+
         model.add(Dense(3, activation='softmax', name='category'))
 
         opt = Adam(lr=self.lr)
@@ -172,13 +171,12 @@ class AnnClf(BaseEstimator):
             validation_data_arr = [(self.scaler.transform(validation_data_arr[i][0]),
                                     {'category': to_categorical(validation_data_arr[i][1]['category'])},
                                     validation_data_arr[i][2]) for i in range(len(validation_data_arr))]
-
-            validation_callback = AdditionalValidationSets(validation_data_arr[1:],
-                                                           tracked_metric_names=self.metric_names)
+            validation_callback = AdditionalValidationSets(
+                validation_data_arr, self.params_exp, model_wrapper=self, tracked_metric_names=self.metric_names,
+                tensorboard_callback=self.tensorboard_callback
+            )
             self.callbacks = [validation_callback] + self.callbacks
-
             validation_data = (validation_data_arr[0][0], validation_data_arr[0][1])
-
         else:
             validation_data = None
 
@@ -190,9 +188,9 @@ class AnnClf(BaseEstimator):
         if self.params_exp['is_inference']:
             self.network.load_weights(self.model_path)
 
-    def predict(self, X, encoder, batch_size=None):
-        X = self.scaler.transform(X)
-        y_pred_proba = self.network.predict(X)
+    def predict(self, X, encoder=None, scale_data=True):
+        X_to_pred = self.scaler.transform(X) if scale_data else X
+        y_pred_proba = self.network.predict(X_to_pred)
         predictions_df = decode_clf_preds(y_pred_proba, encoder)
         return predictions_df
 
@@ -203,10 +201,9 @@ class AnnReg(BaseEstimator):
         self.params_exp = params
         self.network = None
         self.scaler = MinMaxScaler()
-        self.patience = 3000
+        self.patience = 300
         self.batch_size = 256
-        self.lr = 0.001
-        self.dropout_rate = 0.2
+        self.lr = 0.0001
         self.callbacks = []
         self.tensorboard_callback = None
 
@@ -240,7 +237,7 @@ class AnnReg(BaseEstimator):
             self.callbacks.append(ModelCheckpoint(self.model_path, monitor='val_loss', save_best_only=True,
                                                   save_weights_only=True, verbose=1))
         else:
-            self.callbacks.append(EarlyStopping(monitor='val_top_root_mean_squared_error', patience=self.patience,
+            self.callbacks.append(EarlyStopping(monitor='val_loss', patience=self.patience,
                                                 restore_best_weights=True))
         if not self.params_exp['is_test']:
             self.tensorboard_callback = CustomTensorBoard(log_folder=log_name, params=self.params_exp,
@@ -249,34 +246,23 @@ class AnnReg(BaseEstimator):
 
     def create_network(self, params):
         model = Sequential()
-        model.add(Dense(100, input_dim=params['n_features'], activation='relu'))
-        model.add(Dropout(self.dropout_rate))
-        model.add(Dense(100, activation='relu'))
-        model.add(Dropout(self.dropout_rate))
-        model.add(Dense(80, activation='relu'))
-        model.add(Dropout(self.dropout_rate))
-        model.add(Dense(80, activation='relu'))
-        model.add(Dropout(self.dropout_rate))
-        model.add(Dense(40, activation='relu'))
-        model.add(Dropout(self.dropout_rate))
-        model.add(Dense(40, activation='relu'))
-        model.add(Dropout(self.dropout_rate))
-        model.add(Dense(20, activation='relu'))
-        model.add(Dropout(self.dropout_rate))
-        model.add(Dense(20, activation='relu'))
-        model.add(Dropout(self.dropout_rate))
+        model.add(Dense(512, kernel_initializer='normal', activation='relu', input_dim=params['n_features']))
+        model.add(Dense(512, kernel_initializer='normal', activation='relu'))
+        model.add(Dense(512, kernel_initializer='normal', activation='relu'))
+        model.add(Dense(512, kernel_initializer='normal', activation='relu'))
+        model.add(Dense(512, kernel_initializer='normal', activation='relu'))
+        model.add(Dense(512, kernel_initializer='normal', activation='relu'))
+        model.add(Dense(512, kernel_initializer='normal', activation='relu'))
 
-        # model.add(Dense(2))
-        # model.add(tfp.layers.DistributionLambda(
-        #     lambda t: tfd.Normal(loc=t[..., :1],
-        #                          scale=1e-3 + tf.math.softplus(0.05 * t[..., 1:])),
-        #     name='redshift',
-        # ))
-        # negloglik = lambda y, p_y: -p_y.log_prob(y)
-        # loss = {'redshift': negloglik}
-
-        model.add(Dense(1, name='redshift'))
-        loss = 'mean_squared_error'
+        # Uncertainty
+        model.add(Dense(2))
+        model.add(tfp.layers.DistributionLambda(
+            lambda t: tfd.Normal(loc=t[..., :1],
+                                 scale=1e-3 + tf.math.softplus(0.05 * t[..., 1:])),
+            name='redshift',
+        ))
+        negloglik = lambda y, p_y: -p_y.log_prob(y)
+        loss = {'redshift': negloglik}
 
         opt = Adam(lr=self.lr)
         model.compile(loss=loss, optimizer=opt)
@@ -291,15 +277,12 @@ class AnnReg(BaseEstimator):
             validation_data_arr = [(self.scaler.transform(validation_data_arr[i][0]),
                                     validation_data_arr[i][1],
                                     validation_data_arr[i][2]) for i in range(len(validation_data_arr))]
-
             validation_callback = AdditionalValidationSets(
                 validation_data_arr, self.params_exp, additional_metrics_dict=self.metrics_dict, model_wrapper=self,
                 tensorboard_callback=self.tensorboard_callback
             )
             self.callbacks = [validation_callback] + self.callbacks
-
             validation_data = (validation_data_arr[0][0], validation_data_arr[0][1])
-
         else:
             validation_data = None
 
@@ -320,10 +303,9 @@ class AnnReg(BaseEstimator):
         batches = np.split(X_to_pred, indices, axis=0)
         preds_arr = [self.network(batch) for batch in batches]
 
-        # predictions_df['Z_PHOTO'] = np.concatenate([preds.mean() for preds in preds_arr])[:, 0]
-        # predictions_df['Z_PHOTO_STDDEV'] = np.concatenate([preds.stddev() for preds in preds_arr])[:, 0]
-
-        predictions_df.loc[:, 'Z_PHOTO'] = np.concatenate(preds_arr)[:, 0]
+        # Uncertainty
+        predictions_df['Z_PHOTO'] = np.concatenate([preds.mean() for preds in preds_arr])[:, 0]
+        predictions_df['Z_PHOTO_STDDEV'] = np.concatenate([preds.stddev() for preds in preds_arr])[:, 0]
 
         return predictions_df
 
@@ -391,13 +373,16 @@ class AdditionalValidationSets(Callback):
 
             # Make predictions
             predictions = self.model_wrapper.predict(validation_data, scale_data=False)
-            predictions['Z'] = validation_targets['redshift']
 
             # Log scatter plot or confusion matrix
             if self.tensorboard_callback:
-                self.log_redshift_scatter(epoch, predictions, validation_set_name)
+                if 'redshift' in validation_targets:
+                    predictions['Z'] = validation_targets['redshift']
+                    self.log_redshift_scatter(epoch, predictions, validation_set_name)
+                if 'category' in validation_targets:
+                    self.log_confusion_matrix(epoch, predictions, validation_targets['category'], validation_set_name)
 
-            # Additional metrics with custom predict function from model wrapper
+            # Additional metrics with custom predict function from model wrapper, only present in case of redshift
             if self.additional_metrics_dict:
                 for metric_name, metric_func in self.additional_metrics_dict.items():
                     result = metric_func(validation_targets['redshift'], predictions['Z_PHOTO'])
@@ -408,13 +393,25 @@ class AdditionalValidationSets(Callback):
         super().on_epoch_end(epoch, logs)
 
     def log_redshift_scatter(self, epoch, predictions, test_name):
-        log_dir = self.tensorboard_callback.log_dir + '/validation'
+        log_dir = self.tensorboard_callback.log_dir + '/images'
+        # TODO: create just once or close?
         file_writer = tf.summary.create_file_writer(log_dir)
-        scatter_plot = redshift_scatter_plot(predictions, z_pred_col='Z_PHOTO', z_max=4, z_pred_stddev_col=None,
-                                             return_fig=True)
+        scatter_plot = redshift_scatter_plot(predictions, z_pred_col='Z_PHOTO', z_pred_stddev_col='Z_PHOTO_STDDEV',
+                                             z_max=4, return_figure=True)
         scatter_image = plot_to_image(scatter_plot)
         with file_writer.as_default():
             tf.summary.image('redshift scatter - {}'.format(test_name), scatter_image, step=epoch)
+
+    def log_confusion_matrix(self, epoch, predictions, y_true, test_name):
+        log_dir = self.tensorboard_callback.log_dir + '/images'
+        file_writer = tf.summary.create_file_writer(log_dir)
+        class_names = ['GALAXY', 'QSO', 'STAR']
+        y_true_decoded = [class_names[i] for i in np.argmax(y_true, axis=1)]
+        cm = confusion_matrix(y_true_decoded, predictions['CLASS_PHOTO'])
+        cm_fig = plot_confusion_matrix(cm, classes=class_names, normalize=False, title=None, return_figure=True)
+        cm_image = plot_to_image(cm_fig)
+        with file_writer.as_default():
+            tf.summary.image('confusion matrix - {}'.format(test_name), cm_image, step=epoch)
 
 
 class CustomTensorBoard(TensorBoard):
@@ -425,35 +422,15 @@ class CustomTensorBoard(TensorBoard):
         super().__init__(log_dir=self.log_dir, profile_batch=0)
 
         self.params_exp = params
-        self.main_test_name = 'top' if (
-                params['test_method'] == 'magnitude' and not params['is_inference']) else 'random'
+        # self.main_test_name = 'top' if (
+        #         params['test_method'] == 'magnitude' and not params['is_inference']) else 'random'
 
     def on_epoch_end(self, epoch, logs=None):
         logs_to_send = logs.copy()
 
+        # TODO: get adaptive learning rate
         # Add learning rate
         logs_to_send.update({'learning_rate': K.eval(self.model.optimizer.lr)})
-
-        # TODO: if regression and negloglik copy val_loss to val_negloglik, hard to find better place
-        # Check if additional random validation sets are present and put val_random on the same plot with train
-        if any([log_name.startswith('val_random') for log_name in logs_to_send]):
-            for key in list(logs_to_send):
-                # TODO: if val_loss != val_random_loss to val_random_loss -> val_loss
-                if key.startswith('val_random'):
-                    key_1 = key.replace('val_random', 'val')
-                    key_2 = key.replace('val_random', 'val_' + self.main_test_name)
-                    # Move loss used in training to its proper name if not already done in validation
-                    if key_1 in logs_to_send:
-                        logs_to_send[key_2] = logs_to_send[key_1]
-                    # Move random score in order to plot with training scores
-                    logs_to_send[key_1] = logs_to_send[key]
-        else:
-            # No random losses from additional validation sets, in case of inference and classification
-            for key in list(logs_to_send):
-                if key.startswith('val'):
-                    # Move loss used in training to it's proper name if not already done in validation
-                    key_main = key.replace('val', 'val_' + self.main_test_name)
-                    logs_to_send[key_main] = logs_to_send[key]
 
         super().on_epoch_end(epoch, logs_to_send)
 
@@ -482,11 +459,13 @@ def get_single_problem_predictions(model, X, encoder, cfg):
     return predictions
 
 
-def decode_clf_preds(y_pred_proba, encoder):
+def decode_clf_preds(y_pred_proba, encoder=None):
     predictions_df = pd.DataFrame()
-    for i, c in enumerate(encoder.classes_):
+    class_names = encoder.classes_ if encoder else ['GALAXY', 'QSO', 'STAR']
+    for i, c in enumerate(class_names):
         predictions_df['{}_PHOTO'.format(c)] = y_pred_proba[:, i]
-    predictions_df['CLASS_PHOTO'] = encoder.inverse_transform(np.argmax(y_pred_proba, axis=1))
+    idx_max = np.argmax(y_pred_proba, axis=1)
+    predictions_df['CLASS_PHOTO'] = encoder.inverse_transform(idx_max) if encoder else [class_names[i] for i in idx_max]
     return predictions_df
 
 

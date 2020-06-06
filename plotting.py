@@ -183,7 +183,7 @@ def plot_embedding(embedding, labels, label='class', is_continuous=False, alpha=
     plt.show()
 
 
-def plot_confusion_matrix(cm, classes, normalize=False, title='SDSS'):
+def plot_confusion_matrix(cm, classes, normalize=False, title='SDSS', return_figure=False):
     """
     This function prints and plots the confusion matrix.
     Normalization can be applied by setting `normalize=True`.
@@ -191,6 +191,7 @@ def plot_confusion_matrix(cm, classes, normalize=False, title='SDSS'):
     if normalize:
         cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis] * 100
 
+    f = plt.figure()
     cmap = sns.cubehelix_palette(light=.95, as_cmap=True)
     with sns.axes_style('ticks'):
         plt.imshow(cm, interpolation='nearest', cmap=cmap)
@@ -210,6 +211,9 @@ def plot_confusion_matrix(cm, classes, normalize=False, title='SDSS'):
     plt.tight_layout()
     plt.title(title)
     plt.show()
+
+    if return_figure:
+        return f
 
 
 def plot_roc_curve(fpr, tpr, roc_auc):

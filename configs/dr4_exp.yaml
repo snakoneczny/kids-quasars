@@ -2,13 +2,13 @@ train_data: KiDS.DR4.x.SDSS.DR14
 
 inference_data: KiDS.DR4.cols
 
-model: ann
+model: xgb
 
-pred_class: True
+pred_class: False
 
-pred_z: False
+pred_z: True
 
-specialization:
+specialization: GALAXY
 
 cut:
 

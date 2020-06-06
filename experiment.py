@@ -183,7 +183,7 @@ def train_test_top_split(*arrays, test_size=0.2):
     return list(chain.from_iterable((safe_indexing(a, ind_low), safe_indexing(a, ind_top)) for a in arrays))
 
 
-def train_test_top_random_split(*arrays, top_test_size=0.1, random_test_size=0.1):
+def train_test_random_top_split(*arrays, top_test_size=0.1, random_test_size=0.1):
     """
     :param arrays: arrays of any format, the first one should be array or Series
         All arrays are divided based on the values in the first one
@@ -198,17 +198,19 @@ def train_test_top_random_split(*arrays, top_test_size=0.1, random_test_size=0.1
     # Make indexable
     arrays = [a for a in arrays]
 
+    k_rnd = int(random_test_size * arrays[0].shape[0])
+    k_top = int(top_test_size * arrays[0].shape[0])
+
     # Get top index
-    k = int(top_test_size * arrays[0].shape[0])
-    split_ind = arrays[0].shape[0] - k
+    split_ind = arrays[0].shape[0] - k_top
     ind_part = np.argpartition(arrays[0], split_ind)
     ind_test_top = ind_part[split_ind:]
     ind_low = ind_part[:split_ind]
 
-    ind_train, ind_test_random = train_test_split(ind_low, test_size=random_test_size, random_state=8725)
+    ind_train, ind_test_random = train_test_split(ind_low, test_size=k_rnd, random_state=8725)
 
-    return list(chain.from_iterable((safe_indexing(a, ind_train), safe_indexing(a, ind_test_top),
-                                     safe_indexing(a, ind_test_random)) for a in arrays))
+    return list(chain.from_iterable((safe_indexing(a, ind_train), safe_indexing(a, ind_test_random),
+                                     safe_indexing(a, ind_test_top)) for a in arrays))
 
 
 def value_split(*arrays, value):

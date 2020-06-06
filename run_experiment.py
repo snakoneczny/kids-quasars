@@ -10,7 +10,7 @@ from config_parser import get_config
 from env_config import DATA_PATH
 from utils import logger, save_predictions, save_model
 from data import COLUMNS_KIDS_ALL, COLUMNS_SDSS, get_mag_str, process_kids
-from experiment import kfold_validation, train_test_top_random_split, do_experiment
+from experiment import kfold_validation, train_test_random_top_split, do_experiment
 from plotting import plot_feature_ranking
 from models import get_model
 
@@ -77,18 +77,18 @@ elif cfg['test_method'] == 'random':
 
 elif cfg['test_method'] == 'magnitude':
     # Train test split
-    _, _, _, X_train, X_test_top, X_test_random, y_train, y_test_top, y_test_random, \
-    z_train, z_test_top, z_test_random, idx_train, idx_test_top, idx_test_random = train_test_top_random_split(
+    _, _, _, X_train, X_test_random, X_test_top, y_train, y_test_random, y_test_top, \
+    z_train, z_test_random, z_test_top, idx_train, idx_test_random, idx_test_top = train_test_random_top_split(
         data[get_mag_str('r')], X, y_encoded, z, data.index, top_test_size=0.1, random_test_size=0.1)
 
     # Testing
     predictions, scores, report = do_experiment(
         data, model, cfg, encoder,
-        X_train, [X_test_top, X_test_random],
-        y_train, [y_test_top, y_test_random],
-        z_train, [z_test_top, z_test_random],
-        [idx_test_top, idx_test_random],
-        ['top', 'random']
+        X_train, [X_test_random, X_test_top],
+        y_train, [y_test_random, y_test_top],
+        z_train, [z_test_random, z_test_top],
+        [idx_test_random, idx_test_top],
+        ['random', 'top']
     )
 
     # Finish by showing reports

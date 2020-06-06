@@ -21,7 +21,7 @@ from data import DATA_PATH, EXTERNAL_QSO, BASE_CLASSES, BAND_COLUMNS, clean_gaia
     read_fits_to_pandas, process_bitmaps
 from utils import assign_redshift, pretty_print_magnitude, get_column_desc, get_map
 from plotting import PLOT_TEXTS, plot_confusion_matrix, plot_roc_curve, plot_precision_recall_curve, get_line_style, \
-    get_cubehelix_palette, plot_proba_histograms, get_plot_text, get_markers
+    get_cubehelix_palette, plot_proba_histograms, get_plot_text
 
 
 def relative_err_mean(y_true, y_pred):
@@ -45,8 +45,10 @@ def experiment_report(predictions, preds_z_qso=None, preds_z_galaxy=None, test_s
                       z_max=None, col_true='CLASS', flag=None, pointlike=False):
     np.set_printoptions(precision=4)
 
-    predictions = get_preds_subset(predictions, preds_z_qso, preds_z_galaxy, test_subset, min_clf_proba, flag,
-                                   pointlike)
+    predictions = add_kids_sdss_columns(predictions)
+    if preds_z_qso is not None:
+        predictions = assign_redshift(predictions, preds_z_qso, preds_z_galaxy)
+    predictions = get_preds_subset(predictions, test_subset, min_clf_proba, flag, pointlike)
 
     if 'CLASS_PHOTO' in predictions.columns:
         multiclass_report(predictions, col_true=col_true)
@@ -67,29 +69,27 @@ def experiment_report(predictions, preds_z_qso=None, preds_z_galaxy=None, test_s
             redshift_cleaning_report(predictions, cleaning='z_std_dev')
 
 
-def get_preds_subset(predictions, preds_z_qso=None, preds_z_galaxy=None, test_subset=None, min_clf_proba=None,
-                     flag=None, pointlike=None):
-    preds_prepared = add_kids_sdss_columns(predictions)
-    if preds_z_qso is not None:
-        preds_prepared = assign_redshift(preds_prepared, preds_z_qso, preds_z_galaxy)
-    if test_subset:
-        mask = preds_prepared['test_subset'] == test_subset
-        preds_prepared = preds_prepared.loc[mask]
-    if min_clf_proba:
-        mask = preds_prepared[['QSO_PHOTO', 'GALAXY_PHOTO', 'STAR_PHOTO']].max(axis=1) > min_clf_proba
-        preds_prepared = preds_prepared.loc[mask]
-    if flag:
-        preds_prepared = preds_prepared.loc[preds_prepared[flag] == 1]
-    if pointlike:
-        preds_prepared = preds_prepared.loc[preds_prepared['CLASS_STAR'] > 0.8]
-    return preds_prepared
-
-
 def add_kids_sdss_columns(data):
     kids_x_sdss = read_fits_to_pandas(os.path.join(DATA_PATH, 'KiDS/DR4/KiDS.DR4.x.SDSS.DR14.fits'),
                                       ['ID', 'Z_B', 'Z_ML', 'Flag', 'IMAFLAGS_ISO', 'MASK', 'CLASS_STAR'])
     kids_x_sdss = process_bitmaps(kids_x_sdss)
     return data.merge(kids_x_sdss, on=['ID'])
+
+
+def get_preds_subset(predictions, test_subset=None, min_clf_proba=None,
+                     flag=None, pointlike=None):
+    preds_subset = predictions.copy()
+    if test_subset:
+        mask = predictions['test_subset'] == test_subset
+        preds_subset = predictions.loc[mask]
+    if min_clf_proba:
+        mask = preds_subset[['QSO_PHOTO', 'GALAXY_PHOTO', 'STAR_PHOTO']].max(axis=1) > min_clf_proba
+        preds_subset = preds_subset.loc[mask]
+    if flag:
+        preds_subset = preds_subset.loc[preds_subset[flag] == 1]
+    if pointlike:
+        preds_subset = preds_subset.loc[preds_subset['CLASS_STAR'] > 0.8]
+    return preds_subset
 
 
 def multiclass_report(predictions, col_true='CLASS'):
@@ -189,7 +189,7 @@ def completeness_z_report(predictions, col_true='CLASS', z_max=None):
 
         plt.xlabel('redshift')
         plt.ylabel('counts per bin')
-        plt.legend(loc='upper left')
+        plt.legend(loc='upper right')
         plt.show()
 
 
@@ -221,30 +221,30 @@ def redshift_scatter_plots(predictions, z_max):
     z_photo_col = 'Z_PHOTO_WSPEC' if 'Z_PHOTO_WSPEC' in predictions else 'Z_PHOTO'
     z_photo_stddev_col = 'Z_PHOTO_STDDEV_WSPEC' if 'Z_PHOTO_STDDEV_WSPEC' in predictions else 'Z_PHOTO_STDDEV'
     z_max = {'GALAXY': min(1, z_max), 'QSO': z_max}
-    for c in ['QSO']:
+    for c in ['QSO', 'GALAXY']:
         preds_c = predictions.loc[predictions['CLASS'] == c]
         redshift_scatter_plot(preds_c, z_photo_col, z_max[c], z_pred_stddev_col=z_photo_stddev_col, title=c)
 
 
-def redshift_scatter_plot(predictions, z_pred_col, z_max, z_pred_stddev_col=None, title=None, return_fig=False):
-    colors = predictions[z_pred_stddev_col] if z_pred_stddev_col in predictions else None
-
-    # Scatter plot with uncertainty as color and density as size
+def redshift_scatter_plot(predictions, z_pred_col, z_max, z_pred_stddev_col=None, title=None, return_figure=False):
     f, ax = plt.subplots()
-    points = ax.scatter(predictions['Z'], predictions[z_pred_col], c=colors, cmap='rainbow_r', alpha=0.2)
+    colors = predictions[z_pred_stddev_col] if z_pred_stddev_col in predictions else None
+    size = 8
+    points = ax.scatter(predictions['Z'], predictions[z_pred_col], alpha=0.3, cmap='rainbow_r', c=colors, s=size)
     plt.plot(range(z_max + 1))
+
     ax.set(xlim=(0, z_max), ylim=(0, z_max))
     plt.xlabel(get_plot_text('Z'))
     plt.ylabel(get_plot_text(z_pred_col))
     plt.title(get_plot_text(title))
+
     if z_pred_stddev_col in predictions:
         cb = f.colorbar(points)
         cb.set_label(get_plot_text(z_pred_stddev_col))
 
-    if return_fig:
+    plt.show()
+    if return_figure:
         return f
-    else:
-        plt.show()
 
 
 def plot_z_hists(preds, z_max=None):
@@ -303,16 +303,16 @@ def precision_z_report(predictions, col_true='CLASS', z_max=None):
 
         plt.xlabel(get_plot_text('Z_PHOTO'))
         plt.ylabel('counts per bin')
-        plt.legend(loc='upper left')
+        plt.legend(loc='upper right')
         plt.show()
 
 
 def redshift_cleaning_report(predictions, cleaning='clf_proba'):
-    step = 0.001
+    step = 0.01
     classes = ['QSO', 'GALAXY']
     for cls in classes:
         preds_class = predictions.loc[predictions['CLASS_PHOTO'] == cls]
-        thresholds = np.arange(preds_class['Z_PHOTO_STDDEV'].min() + step, preds_class['Z_PHOTO_STDDEV'].max() + step,
+        thresholds = np.arange(preds_class['Z_PHOTO_STDDEV'].min() + step, preds_class['Z_PHOTO_STDDEV'].max(),
                                step) if cleaning == 'z_std_dev' else np.arange(0, 1, step)
 
         size_func_tuple = ('fraction of objects', partial(my_size, n=preds_class.shape[0]))
