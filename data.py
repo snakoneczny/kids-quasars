@@ -142,7 +142,7 @@ EXTERNAL_QSO = [
 
 
 def process_kids(path, columns=None, bands=BANDS, kids_cleaning=True, sdss_cleaning=False, cut=None, n=None,
-                 with_print=True):
+                 with_print=True, update_kids=False):
     extension = path.split('.')[-1]
     if extension == 'fits':
         data = read_fits_to_pandas(path, columns=columns, n=n)
@@ -152,7 +152,13 @@ def process_kids(path, columns=None, bands=BANDS, kids_cleaning=True, sdss_clean
     else:
         raise (Exception('Not supported file type {} in {}'.format(extension, path)))
 
-    # TODO: update with KiDS DR4.1
+    # Update with KiDS DR4.1
+    if update_kids:
+        data_update = read_fits_to_pandas(os.path.join(DATA_PATH, 'KiDS/DR4/KiDS.DR4.1.update.0.fits'),
+                                          columns=[col for col in columns if col in COLUMNS_KIDS_ALL])
+        data = data.set_index('ID', drop=False)
+        data_update = data_update.set_index('ID', drop=False)
+        data.update(data_update)
 
     return process_kids_data(data, bands=bands, kids_cleaning=kids_cleaning, sdss_cleaning=sdss_cleaning, cut=cut,
                              with_print=with_print)
@@ -368,6 +374,13 @@ def process_2df(data):
 
 
 def merge_specialized_catalogs(ctlg_clf, ctlg_z_qso, ctlg_z_galaxy=None):
+    if isinstance(ctlg_clf, str):
+        ctlg_clf = read_fits_to_pandas(ctlg_clf)
+    if isinstance(ctlg_z_qso, str):
+        ctlg_z_qso = read_fits_to_pandas(ctlg_z_qso)
+    if isinstance(ctlg_z_galaxy, str):
+        ctlg_z_galaxy = read_fits_to_pandas(ctlg_z_galaxy)
+
     catalog = ctlg_clf.copy()
 
     # QSO
@@ -395,9 +408,9 @@ def add_subset_info(data, extra_info=False):
     cs_safe_idx = (data['CLASS_STAR'] > 0.8) | (data['CLASS_STAR'] < 0.2)
     if extra_info:
         subsets_idx = [
-            ('extrapolation, r in (24, 25)', cs_safe_idx & (data['MAG_GAAP_r'] < 25)),
-            ('extrapolation, r in (23, 24)', cs_safe_idx & (data['MAG_GAAP_r'] < 24)),
-            ('extrapolation, r in (22, 23)', cs_safe_idx & (data['MAG_GAAP_r'] < 23)),
+            ('extrap., r in (24, 25)', cs_safe_idx & (data['MAG_GAAP_r'] < 25)),
+            ('extrap., r in (23, 24)', cs_safe_idx & (data['MAG_GAAP_r'] < 24)),
+            ('extrap., r in (22, 23)', cs_safe_idx & (data['MAG_GAAP_r'] < 23)),
             ('safe, r < 22', cs_safe_idx & (data['MAG_GAAP_r'] < 22)),
         ]
     else:

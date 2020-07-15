@@ -182,14 +182,15 @@ def completeness_z_report(predictions, col_true='CLASS', z_max=None):
 
         for i, class_pred in enumerate(BASE_CLASSES):
             hist_kws = {'alpha': 1.0, 'histtype': 'step', 'linewidth': 1.5, 'linestyle': get_line_style(i)}
-            label = '{} clf. as {}'.format(get_plot_text(class_true), get_plot_text(class_pred, is_photo=True))
+            label = '{}'.format(get_plot_text(class_pred, is_photo=True))
             ax = sns.distplot(true_class_as_dict[class_pred], label=label, bins=bin_edges, kde=False, rug=False,
                               color=color_palette[i], hist_kws=hist_kws)
             ax.set(yscale='log')
 
-        plt.xlabel('redshift')
+        plt.title(get_plot_text(class_true))
+        plt.xlabel(r'$z_{spec}$')
         plt.ylabel('counts per bin')
-        plt.legend(loc='upper right')
+        plt.legend(loc='upper right', framealpha=1.0)
         plt.show()
 
 
@@ -266,6 +267,7 @@ def plot_z_hists(preds, z_max=None):
 
         plt.xlabel(get_plot_text(x_col))
         plt.ylabel('normalized counts per bin')
+        plt.legend(framealpha=1.0)
         plt.show()
 
 
@@ -296,14 +298,15 @@ def precision_z_report(predictions, col_true='CLASS', z_max=None):
 
         for i, cls_true in enumerate(BASE_CLASSES):
             hist_kws = {'alpha': 1.0, 'histtype': 'step', 'linewidth': 1.5, 'linestyle': get_line_style(i)}
-            label = '{} clf. as {}'.format(get_plot_text(cls_true), get_plot_text(cls_pred, is_photo=True))
+            label = '{}'.format(get_plot_text(cls_true))
             ax = sns.distplot(photo_class_as_dict[cls_true], label=label, bins=bin_edges, kde=False, rug=False,
                               color=color_palette[i], hist_kws=hist_kws)
             ax.set(yscale='log')
 
+        plt.title(get_plot_text(cls_pred, is_photo=True))
         plt.xlabel(get_plot_text('Z_PHOTO'))
         plt.ylabel('counts per bin')
-        plt.legend(loc='upper right')
+        plt.legend(loc='upper right', framealpha=1.0)
         plt.show()
 
 
@@ -373,7 +376,7 @@ def plot_cleaning_metrics(preds_class, cls, metrics_to_plot, thresholds, step, c
         plotted_arr.append(plotted)
     ax_arr[1].yaxis.grid(False)
     fig.tight_layout()  # otherwise the right y-label is slightly clipped
-    plt.legend(handles=plotted_arr, loc='lower left')
+    plt.legend(handles=plotted_arr, loc='lower left', framealpha=1.0)
     plt.show()
 
 
@@ -385,7 +388,8 @@ def metric_class_split(y_true, y_pred, classes, metric):
     return scores
 
 
-def number_counts(data_dict, linear_data, nside=128, step=.1, band_column='MAG_GAAP_r', legend_loc='upper left'):
+def number_counts(data_dict, linear_data, nside=128, step=.1, band_column='MAG_GAAP_r', legend_loc='upper left',
+                  legend_size=None):
     fig, ax = plt.subplots()
     to_plot_df = pd.DataFrame()
     x_col = pretty_print_magnitude(band_column)
@@ -418,10 +422,8 @@ def number_counts(data_dict, linear_data, nside=128, step=.1, band_column='MAG_G
 
     plt.yscale('log')
     handles, labels = ax.get_legend_handles_labels()
-    ax.legend(handles=handles[1:], labels=labels[1:], loc=legend_loc)
-    # TODO: better legend size, probably not related to figure size unlike the font size may be
-    # prop = {'size': legend_size} if legend_size else {}
-    # plt.legend(loc=legend_loc, prop=prop)
+    prop = {'size': legend_size} if legend_size else {}
+    ax.legend(handles=handles[1:], labels=labels[1:], loc=legend_loc, framealpha=1.0, prop=prop)
     plt.setp(ax.get_legend().get_texts(), fontsize='9')
     plt.show()
 
@@ -445,7 +447,7 @@ def plot_linear_data(data, annotations=True):
 
 
 def spatial_number_density(data_dict, nside=128, z_bin_step=0.5, z_bin_size=0.5, cosmo_model=cosmo_wmap9,
-                           z_max=None):
+                           z_max=None, legend_size=None):
     fig, ax = plt.subplots()
     to_plot_df = pd.DataFrame()
     x_col = 'z'
@@ -486,7 +488,8 @@ def spatial_number_density(data_dict, nside=128, z_bin_step=0.5, z_bin_size=0.5,
     plt.xlim(right=z_max)
     plt.yscale('log')
     handles, labels = ax.get_legend_handles_labels()
-    ax.legend(handles=handles[-1:1], labels=labels[-1:1], loc='upper right')
+    prop = {'size': legend_size} if legend_size else {}
+    ax.legend(handles=handles[1:], labels=labels[1:], loc='upper right', framealpha=1.0, prop=prop)
     plt.setp(ax.get_legend().get_texts(), fontsize='9')
     plt.show()
 
@@ -546,7 +549,7 @@ def number_counts_bins(data_dict, x_lim, step=.5, band_column='MAG_GAAP_r', lege
 
     sns.catplot(x=band_column, y='objects', hue='dataset', data=counts, kind='bar',
                 aspect=1.6, height=5, legend_out=False, palette='cubehelix')
-    plt.legend(loc=legend_loc)
+    plt.legend(loc=legend_loc, framealpha=1.0)
     plt.xlabel(pretty_print_magnitude(band_column))
     plt.xticks(rotation=30)
     plt.ylabel('counts per bin')
@@ -589,7 +592,7 @@ def number_counts_pixels(data, nside=58, x_lim=None, title=None, legend_loc='upp
 
     sns.catplot(x='magnitude range', y='pixel density', hue='magnitude', data=pixel_densities, kind='bar',
                 aspect=1.7, height=5, legend_out=False, palette='cubehelix')
-    plt.legend(loc=legend_loc)
+    plt.legend(loc=legend_loc, framealpha=1.0)
     plt.yscale('log')
     plt.title(title)
 
@@ -644,7 +647,7 @@ def test_against_external_catalog(ext_catalog, catalog, columns=BAND_COLUMNS, cl
                                  rug=False,
                                  hist_kws={'alpha': 0.5, 'histtype': 'step'})
                     plt.title(title)
-                plt.legend()
+                plt.legend(framealpha=1.0)
 
     if save:
         catalog.loc[is_in_ext].to_csv('catalogs_intersection/{}.csv'.format(title))
@@ -674,16 +677,18 @@ def gaia_motion_analysis(data, norm=False, class_col='CLASS_PHOTO'):
         motions = ['parallax', 'pmra', 'pmdec']
         if norm & (class_name == 'QSO'):
             motions = [m + '_norm' for m in motions]
-        result_df = pd.DataFrame(index=['mean', 'median', 'sigma'], columns=motions)
+        result_df = pd.DataFrame(index=['mean', 'sigma', 'mean_error', 'median'], columns=motions)
 
         for motion in motions:
             data_of_interest = data_movement.loc[data_movement[class_col] == class_name, motion]
             (mu, sigma) = stats.norm.fit(data_of_interest)
             median = np.median(data_of_interest)
+            mu_error = sigma / math.sqrt(data_of_interest.shape[0])
 
             result_df.loc['mean', motion] = mu
-            result_df.loc['median', motion] = median
             result_df.loc['sigma', motion] = sigma
+            result_df.loc['mean_error', motion] = mu_error
+            result_df.loc['median', motion] = median
 
             plt.figure()
             sns.distplot(data_of_interest, color=get_cubehelix_palette(1)[0], kde_kws=dict(bw=0.5))
@@ -695,7 +700,7 @@ def gaia_motion_analysis(data, norm=False, class_col='CLASS_PHOTO'):
         print(result_df)
 
 
-def proba_motion_analysis(data_x_gaia, motions=None, x_lim=(0.3, 1), step=0.01, mean_y_lines=None):
+def proba_motion_analysis(data_x_gaia, motions=None, x_lim=(0.3, 1), step=0.004, mean_y_lines=None):
     motions = ['parallax'] if motions is None else motions
     mu_dict, sigma_dict, median_dict, error_dict = defaultdict(list), defaultdict(list), defaultdict(list), defaultdict(
         list)
@@ -747,14 +752,17 @@ def proba_motion_analysis(data_x_gaia, motions=None, x_lim=(0.3, 1), step=0.01, 
                 ax.fill_between(thresholds, lower, upper, color=color_palette[i], alpha=0.2)
 
             if t[1] == 'mean' and mean_y_lines is not None:
-                for line_name, y in mean_y_lines:
-                    # plt.hlines(y, thresholds[0], thresholds[-1], colors='k', linestyles='solid', label=line_name)
-                    plt.axhline(y, linestyle='--')
+                x_lim = ax.get_xlim()
+                thr_x_lim = np.arange(x_lim[0], x_lim[1] + 0.01, 0.01)
+                for line_name, y, y_err in mean_y_lines:
+                    plt.axhline(y, linestyle='--', color='b')
+                    ax.fill_between(thr_x_lim, y - y_err / 2, y + y_err / 2, color='b', alpha=0.2)
                     plt.text(thresholds[0] + 0.01 * abs(max(thresholds) - min(thresholds)),
-                             y + 0.03 * abs(max(vals) - min(vals)), line_name)
+                             y + 0.06 * abs(max(vals) - min(vals)), line_name)
+                ax.set_xlim(x_lim)
 
             plt.xlabel('minimum classification probability')
             plt.ylabel('{} {}'.format(t[1], '[mas]'))
 
         if label:
-            plt.legend()
+            plt.legend(framealpha=1.0)

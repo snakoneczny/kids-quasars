@@ -74,7 +74,7 @@ def build_xgb_reg(params):
             max_depth=5, learning_rate=0.1, gamma=0, min_child_weight=20, colsample_bytree=0.5, subsample=1,
             scale_pos_weight=1, reg_alpha=1, reg_lambda=1, n_estimators=100000, objective='reg:squarederror',
             booster='gbtree', max_delta_step=0, colsample_bylevel=1, colsample_bynode=1, base_score=0.5,
-            random_state=1587, missing=None, importance_type='gain', verbosity=0, n_jobs=24,
+            random_state=273453, missing=None, importance_type='gain', verbosity=0, n_jobs=24,
         )
 
     elif params['specialization'] == 'QSO':
@@ -119,9 +119,9 @@ class AnnClf(BaseEstimator):
         if params['is_test']:
             self.epochs = 10
         elif params['is_inference']:
-            self.epochs = 400
+            self.epochs = 350
         else:
-            self.epochs = 20000
+            self.epochs = 10000
 
         log_name = 'clf, lr={}, bs={}, {}'.format(self.lr, self.batch_size, params['timestamp_start'].replace('_', ' '))
         if params['tag']:
@@ -129,11 +129,10 @@ class AnnClf(BaseEstimator):
 
         self.callbacks = []
         if self.params_exp['is_inference']:
-            self.callbacks.append(ModelCheckpoint(self.model_path, monitor='val_categorical_crossentropy',
-                                                  save_best_only=True, save_weights_only=True, verbose=1))
+            self.callbacks.append(ModelCheckpoint(self.model_path, monitor='val_loss', save_best_only=True,
+                                                  save_weights_only=True, verbose=1))
         else:
-            self.callbacks.append(EarlyStopping(monitor='val_categorical_crossentropy', patience=self.patience,
-                                                restore_best_weights=True))
+            self.callbacks.append(EarlyStopping(monitor='val_loss', patience=self.patience, restore_best_weights=True))
 
         if not self.params_exp['is_test']:
             self.tensorboard_callback = CustomTensorBoard(log_folder=log_name, params=self.params_exp,
@@ -188,7 +187,7 @@ class AnnClf(BaseEstimator):
         if self.params_exp['is_inference']:
             self.network.load_weights(self.model_path)
 
-    def predict(self, X, encoder=None, scale_data=True):
+    def predict(self, X, encoder=None, scale_data=True, batch_size=None):
         X_to_pred = self.scaler.transform(X) if scale_data else X
         y_pred_proba = self.network.predict(X_to_pred)
         predictions_df = decode_clf_preds(y_pred_proba, encoder)
@@ -219,9 +218,9 @@ class AnnReg(BaseEstimator):
             self.epochs = 10
         elif params['is_inference']:
             if params['specialization'] == 'QSO':
-                self.epochs = 3000
+                self.epochs = 200
             elif params['specialization'] == 'GALAXY':
-                self.epochs = 1600
+                self.epochs = 500
             else:
                 self.epochs = 1000
         else:
@@ -237,8 +236,7 @@ class AnnReg(BaseEstimator):
             self.callbacks.append(ModelCheckpoint(self.model_path, monitor='val_loss', save_best_only=True,
                                                   save_weights_only=True, verbose=1))
         else:
-            self.callbacks.append(EarlyStopping(monitor='val_loss', patience=self.patience,
-                                                restore_best_weights=True))
+            self.callbacks.append(EarlyStopping(monitor='val_loss', patience=self.patience, restore_best_weights=True))
         if not self.params_exp['is_test']:
             self.tensorboard_callback = CustomTensorBoard(log_folder=log_name, params=self.params_exp,
                                                           is_inference=self.params_exp['is_inference'])
@@ -379,8 +377,9 @@ class AdditionalValidationSets(Callback):
                 if 'redshift' in validation_targets:
                     predictions['Z'] = validation_targets['redshift']
                     self.log_redshift_scatter(epoch, predictions, validation_set_name)
-                if 'category' in validation_targets:
-                    self.log_confusion_matrix(epoch, predictions, validation_targets['category'], validation_set_name)
+                # TODO: log only top test confusion matrix
+                # if 'category' in validation_targets:
+                #     self.log_confusion_matrix(epoch, predictions, validation_targets['category'], validation_set_name)
 
             # Additional metrics with custom predict function from model wrapper, only present in case of redshift
             if self.additional_metrics_dict:

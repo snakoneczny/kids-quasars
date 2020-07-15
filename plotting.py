@@ -1,5 +1,6 @@
 import itertools
 from collections import OrderedDict
+from functools import partial
 
 import scipy
 import numpy as np
@@ -33,11 +34,12 @@ MARKERS = ['o', 'x', 's', '+', 'p', 'h', 'H']
 
 LABELS_ORDER = [
     'safe',
-    'safe, r < 22'
+    'safe, r < 22',
     'extrapolation',
-    'extrapolation, r in (22, 23)',
-    'extrapolation, r in (23, 24)',
-    'extrapolation, r > 24',
+    'extrap., r in (22, 23)',
+    'extrap., r in (23, 24)',
+    'extrap., r in (24, 25)',
+    'extrap., r > 25',
     'unsafe',
     'QSO',
     'QSO_PHOTO',
@@ -103,84 +105,113 @@ def get_cubehelix_palette(n, reverse=True):
         return palette
 
 
-def make_embedding_plots(data, legend_loc='lower right'):
+def make_embedding_plots(data, legend_loc='upper left'):
     embedding = data[['t-SNE x', 't-SNE y']].values
+    partial_plot = partial(plot_embedding, legend_loc=legend_loc)
+
+    for i in range(embedding.shape[0]):
+        x, y = embedding[i, 0], embedding[i, 1]
+        embedding[i, 0] = y
+        embedding[i, 1] = x
 
     # Photometric plots
-    plot_embedding(embedding, data[get_mag_str('r')], label='r magnitude', is_continuous=True, legend_loc=legend_loc)
-    plot_embedding(embedding, data[get_magerr_str('r')], label='r mag. error', is_continuous=True,
-                   legend_loc=legend_loc)
+    x_lim, y_lim = partial_plot(embedding, data[get_mag_str('r')], title=r'$r$ magnitude', is_continuous=True,
+                                return_limits=True)
+    partial_plot = partial(partial_plot, x_lim=x_lim, y_lim=y_lim)
+    partial_plot(embedding, data[get_magerr_str('r')], title=r'$r$ magnitude error', is_continuous=True)
 
     # Flags
-    plot_embedding(embedding, data['Flag_1'], label='Flag 1st bit', is_continuous=False, legend_loc=legend_loc)
-    plot_embedding(embedding, data['Flag_2'], label='Flag 2nd bit', is_continuous=False, legend_loc=legend_loc)
-    plot_embedding(embedding, data['IMAFLAGS_ISO_1'], label='IMAFLAGS_ISO 1st bit', is_continuous=False,
-                   legend_loc=legend_loc)
-    plot_embedding(embedding, data['MASK_2'], label='MASK 2nd bit', is_continuous=False, legend_loc=legend_loc)
-    plot_embedding(embedding, data['MASK_13'], label='MASK 13th bit', is_continuous=False, legend_loc=legend_loc)
+    partial_plot(embedding, data['Flag_1'], title='Flag 1st bit', is_continuous=False)
+    partial_plot(embedding, data['Flag_2'], title='Flag 2nd bit', is_continuous=False)
+    partial_plot(embedding, data['IMAFLAGS_ISO_1'], title='IMAFLAGS_ISO 1st bit', is_continuous=False)
+    partial_plot(embedding, data['MASK_2'], title='MASK 2nd bit', is_continuous=False)
+    partial_plot(embedding, data['MASK_13'], title='MASK 13th bit', is_continuous=False)
 
     # Point like classifiers
-    plot_embedding(embedding, data['CLASS_STAR'], label='class star', is_continuous=True, legend_loc=legend_loc)
-    plot_embedding(embedding, data['SG2DPHOT_3'], label='SG2DPHOT 3rd bit', is_continuous=False, legend_loc=legend_loc)
+    partial_plot(embedding, data['CLASS_STAR'], title='class star', is_continuous=True)
+    partial_plot(embedding, data['SG2DPHOT_3'], title='SG2DPHOT 3rd bit', is_continuous=False)
 
-    # Spectroscopic plots
+    # Inference subsets
+    if 'subset' in data:
+        partial_plot(embedding, data['subset'], title='inference subset')
+    if 'is_train' in data:
+        partial_plot(embedding, data['is_train'], title='used in training')
+
+    # Classification plots
     if 'CLASS' in data:
-        plot_embedding(embedding, data['CLASS'], label='SDSS class', legend_loc=legend_loc)
+        partial_plot(embedding, data['CLASS'], title='class')
         if (data['CLASS'] == 'no class').any():
             idx = data['CLASS'] != 'no class'
-            plot_embedding(embedding[idx], data.loc[idx, 'CLASS'], label='SDSS class', legend_loc=legend_loc)
-    if 'Z' in data:
-        plot_embedding(embedding, data['Z'], label='redshift z', is_continuous=True, legend_loc=legend_loc)
-    # And ML from KiDS
-    if 'Z_B' in data:
-        plot_embedding(embedding, data['Z_B'], label='redshift Z_B', is_continuous=True, legend_loc=legend_loc)
-
-    # ML plots
-    if 'subset' in data:
-        plot_embedding(embedding, data['subset'], label='inference subset', legend_loc=legend_loc)
+            partial_plot(embedding[idx], data.loc[idx, 'CLASS'], title=r'class$_{spec}$')
     if 'CLASS_PHOTO' in data:
-        plot_embedding(embedding, data['CLASS_PHOTO'], label='photo class', legend_loc=legend_loc)
-        plot_embedding(embedding, data['QSO_PHOTO'], label='photometric QSO probability', is_continuous=True,
-                       legend_loc=legend_loc)
+        partial_plot(embedding, data['CLASS_PHOTO'], title=r'class$_{photo}$')
+        partial_plot(embedding, data['QSO_PHOTO'], title=r'QSO$_{photo}$ probability', is_continuous=True)
+
+        # Final cuts
+        data['catalog'] = 'None'
+        idx = (data['subset'] == 'safe, r < 22') & (data['QSO_PHOTO'] > 0.9)
+        data.loc[idx, 'catalog'] = 'safe, r < 22'
+        for extrap_subset in ['extrap., r in (22, 23)', 'extrap., r in (23, 24)', 'extrap., r in (24, 25)']:
+            idx = (data['subset'] == extrap_subset) & (data['QSO_PHOTO'] > 0.98)
+            data.loc[idx, 'catalog'] = extrap_subset
+        partial_plot(embedding, data['catalog'], title=r'final catalog QSO$_{photo}$')
+
+    # Redshift plots
+    if 'Z' in data:
+        partial_plot(embedding, data['Z'], title=r'z$_{spec}$', is_continuous=True)
+    if 'Z_B' in data:
+        partial_plot(embedding, data['Z_B'], title='z$_B$', is_continuous=True)
     if 'Z_PHOTO' in data:
         idx = (data['CLASS_PHOTO'] == 'QSO')
-        plot_embedding(embedding[idx], data.loc[idx]['Z_PHOTO'], label='photo z',
-                       is_continuous=True, legend_loc=legend_loc)
+        partial_plot(embedding[idx], data.loc[idx]['Z_PHOTO'], title=r'z$_{photo}(QSO_{photo})$', is_continuous=True)
+
+        idx = ((data['CLASS_PHOTO'] == 'QSO') & (data['catalog'] != 'None'))
+        partial_plot(embedding[idx], data.loc[idx]['Z_PHOTO'], title=r'final catalog z$_{photo}(QSO_{photo})$',
+                     is_continuous=True)
+
     if 'Z_PHOTO_STDDEV' in data:
         idx = (data['CLASS_PHOTO'] == 'QSO')
-        plot_embedding(embedding[idx], data.loc[idx]['Z_PHOTO_STDDEV'],
-                       label='photo z uncertainity', is_continuous=True, legend_loc=legend_loc)
-    if 'is_train' in data:
-        plot_embedding(embedding, data['is_train'], label='used in training', legend_loc=legend_loc)
+        partial_plot(embedding[idx], data.loc[idx]['Z_PHOTO_STDDEV'], title='photo z uncertainty', is_continuous=True)
 
 
-def plot_embedding(embedding, labels, label='class', is_continuous=False, alpha=0.5, color_palette='cubehelix',
-                   with_custom_colors=True, labels_in_order=True, legend_loc='upper left'):
+def plot_embedding(embedding, labels, title='class', is_continuous=False, alpha=0.5, color_palette='cubehelix',
+                   with_custom_colors=True, labels_in_order=True, legend_loc='upper left', return_limits=False,
+                   x_lim=None, y_lim=None):
+    fig_scale = 1.8
+    point_size = 30
     if is_continuous:
-        f, ax = plt.subplots(figsize=(9, 7))
-        points = ax.scatter(embedding[:, 0], embedding[:, 1], c=labels, s=50, cmap='gnuplot_r', alpha=alpha)
-        plt.xlabel('t-SNE x')
-        plt.ylabel('t-SNE y')
-        cb = f.colorbar(points)
-        cb.set_label(pretty_print_feature(label))
+        f, ax = plt.subplots(figsize=(6 * fig_scale, 4 * fig_scale))
+        points = ax.scatter(embedding[:, 0], embedding[:, 1], c=labels, s=point_size, cmap='gnuplot_r', alpha=alpha)
+        plt.colorbar(points, pad=0.01)
 
     else:
         labels_unique = [label for label in LABELS_ORDER if
                          label in np.unique(labels)] if labels_in_order else np.unique(labels)
+        labels_unique = [label for label in labels_unique if label != 'None']
         n_colors = len(labels_unique)
         if isinstance(color_palette, str):
             color_palette = sns.color_palette(color_palette, n_colors)
             color_palette = {labels_unique[k]: v for k, v in enumerate(color_palette)}
         if with_custom_colors:
             color_palette.update(CUSTOM_COLORS)
+        f, ax = plt.subplots(figsize=(6 * fig_scale, 4 * fig_scale))
+        for label in labels_unique:
+            idx = np.where(labels == label)[0]
+            colors = [color_palette[label] for _ in range(idx.shape[0])]
+            ax.scatter(embedding[idx, 0], embedding[idx, 1], c=colors, label=label, s=point_size, alpha=alpha)
+        plt.legend(loc=legend_loc, framealpha=1.0)
 
-        data = pd.DataFrame({'t-SNE x': embedding[:, 0], 't-SNE y': embedding[:, 1], label: labels})
-        hue_order = [label for label in LABELS_ORDER if label in color_palette.keys()] if labels_in_order else None
-        sns.lmplot(x='t-SNE x', y='t-SNE y', hue=label, data=data, palette=color_palette, fit_reg=False,
-                   scatter_kws={'alpha': alpha}, size=7, hue_order=hue_order, legend=False)
-        plt.legend(loc=legend_loc, title=pretty_print_feature(label))
-
+    plt.title(pretty_print_feature(title))
+    ax.set_aspect('equal')
+    if x_lim:
+        ax.set_xlim(x_lim)
+    if y_lim:
+        ax.set_ylim(y_lim)
+    plt.tight_layout()
     plt.show()
+
+    if return_limits:
+        return ax.get_xlim(), ax.get_ylim()
 
 
 def plot_confusion_matrix(cm, classes, normalize=False, title='SDSS', return_figure=False):
@@ -226,7 +257,7 @@ def plot_roc_curve(fpr, tpr, roc_auc):
     plt.xlabel('False Positive Rate')
     plt.ylabel('True Positive Rate')
     plt.title('Receiver operating characteristic')
-    plt.legend(loc="lower right")
+    plt.legend(loc='lower right', framealpha=1.0)
     plt.show()
 
 
@@ -254,7 +285,7 @@ def plot_proba_histograms(data):
                      hist_kws={'alpha': 1.0, 'histtype': 'step', 'linewidth': 1.5, 'linestyle': get_line_style(i)})
     plt.xlabel('probability')
     plt.ylabel('normalized counts per bin')
-    plt.legend()
+    plt.legend(framealpha=1.0)
     plt.tight_layout()
     plt.show()
 
@@ -288,7 +319,7 @@ def plot_histograms(data_dict, columns=BAND_COLUMNS, x_lim_dict=None, title=None
         plt.ylabel(y_label)
 
         prop = {'size': legend_size} if legend_size else {}
-        plt.legend(loc=legend_loc, prop=prop)
+        plt.legend(loc=legend_loc, prop=prop, framealpha=1.0)
 
         if vlines:
             for x in vlines:
@@ -308,7 +339,7 @@ def plot_class_histograms(data, columns, class_column='CLASS', title=None, log_y
         if log_y: plt.yscale('log')
         if title: plt.title(title)
         plt.xlabel(pretty_print_feature(c))
-        plt.legend()
+        plt.legend(framealpha=1.0)
         plt.show()
 
 
@@ -369,7 +400,7 @@ def plot_proba_against_size(data, column='QSO', x_lim=(0, 1), step=0.01):
 
 
 def plot_external_qso_consistency(catalog):
-    step = 0.01
+    step = 0.001
     thresholds = np.arange(0.3, 1.0, step)
     color_palette = get_cubehelix_palette(len(EXTERNAL_QSO))
 
@@ -400,16 +431,16 @@ def plot_external_qso_consistency(catalog):
         agreement_arr = [qso_data_arr[i].shape[0] / float(threshold_data_arr[i].shape[0]) for i, _ in
                          enumerate(qso_data_arr)]
 
-        # TODO: Ugly work around
-        external_qso_name = get_external_qso_short_name(external_qso_name)
-        external_qso_name += ' QSO'
+        # # TODO: Ugly work around
+        # external_qso_name = get_external_qso_short_name(external_qso_name)
+        # external_qso_name += ' QSO'
 
         plt.plot(thresholds, agreement_arr, label=external_qso_name, linestyle=get_line_style(i), alpha=1.0,
                  color=color_palette[i])
 
-    plt.xlabel('KiDS minimum photo probability')
-    plt.ylabel('KiDS photo QSO contribution')
-    legend = plt.legend(loc='lower left')
+    plt.xlabel(r'KiDS minimum photo probability')
+    plt.ylabel(r'KiDS QSO$_{photo}$ contribution')
+    legend = plt.legend(loc='lower left', framealpha=1.0)
     plt.tight_layout()
 
     ax = plt.axes()
@@ -418,7 +449,7 @@ def plot_external_qso_consistency(catalog):
     # Customized legend place
     ax = plt.gca()
     bounding_box = legend.get_bbox_to_anchor().inverse_transformed(ax.transAxes)
-    y_offset = 0.08
+    y_offset = 0.13
     bounding_box.y0 += y_offset
     bounding_box.y1 += y_offset
     legend.set_bbox_to_anchor(bounding_box, transform=ax.transAxes)
@@ -450,12 +481,13 @@ def plot_external_qso_size(data):
         plt.xlabel('QSO probability threshold')
         plt.ylabel('cross match size')
 
-    plt.legend()
+    plt.legend(framealpha=1.0)
     plt.show()
 
 
 # TODO: mechanics of feature importance should not be here?
-def plot_feature_ranking(model, features, model_type='rf', importance_type='gain', n_features=15, title=None):
+def plot_feature_ranking(model, features, model_type='rf', importance_type='gain', n_features=15, n_top_offsets=1,
+                         title=None):
     if model_type == 'rf':
         importances = model.feature_importances_ * 100
         # std = np.std([tree.feature_importances_ for tree in model.estimators_], axis=0)
@@ -484,10 +516,11 @@ def plot_feature_ranking(model, features, model_type='rf', importance_type='gain
 
     val_0 = importances_sorted[0]
     for i, value in enumerate(importances_sorted):
-        offset = -0.17 * val_0 if i == 0 else .02 * val_0
-        color = 'white' if i == 0 else 'black'
-        ax.text(value + offset, i + .2, '{:.2f}%'.format(value), color=color)
+        offset = -0.17 * val_0 if i < n_top_offsets else .01 * val_0
+        color = 'white' if i < n_top_offsets else 'black'
+        ax.text(value + offset, i + .1, '{:.2f}%'.format(value), color=color)
 
+    ax.grid(False)
     plt.title(title)
     plt.tight_layout()
     plt.show()
