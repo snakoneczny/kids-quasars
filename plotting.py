@@ -8,7 +8,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from utils import pretty_print_feature, get_external_qso_short_name
+from utils import pretty_print_feature
 from data import EXTERNAL_QSO, BASE_CLASSES, BAND_COLUMNS, process_2df, read_fits_to_pandas, get_mag_str, get_magerr_str
 
 COLOR_QSO = (0.08605633600581403, 0.23824692404212, 0.30561236308077167)
@@ -37,7 +37,9 @@ LABELS_ORDER = [
     'safe, r < 22',
     'extrapolation',
     'extrap., r in (22, 23)',
+    'extrap., r in (22, 23.5)',
     'extrap., r in (23, 24)',
+    'extrap., r in (23.5, 25)',
     'extrap., r in (24, 25)',
     'extrap., r > 25',
     'unsafe',
@@ -151,7 +153,7 @@ def make_embedding_plots(data, legend_loc='upper left'):
         data['catalog'] = 'None'
         idx = (data['subset'] == 'safe, r < 22') & (data['QSO_PHOTO'] > 0.9)
         data.loc[idx, 'catalog'] = 'safe, r < 22'
-        for extrap_subset in ['extrap., r in (22, 23)', 'extrap., r in (23, 24)', 'extrap., r in (24, 25)']:
+        for extrap_subset in ['extrap., r in (22, 23.5)', 'extrap., r in (23.5, 25)']:
             idx = (data['subset'] == extrap_subset) & (data['QSO_PHOTO'] > 0.98)
             data.loc[idx, 'catalog'] = extrap_subset
         partial_plot(embedding, data['catalog'], title=r'final catalog QSO$_{photo}$')
@@ -185,8 +187,9 @@ def plot_embedding(embedding, labels, title='class', is_continuous=False, alpha=
         plt.colorbar(points, pad=0.01)
 
     else:
+        labels_unique = np.unique(labels)
         labels_unique = [label for label in LABELS_ORDER if
-                         label in np.unique(labels)] if labels_in_order else np.unique(labels)
+                         label in labels_unique] if labels_in_order else labels_unique
         labels_unique = [label for label in labels_unique if label != 'None']
         n_colors = len(labels_unique)
         if isinstance(color_palette, str):
@@ -291,13 +294,17 @@ def plot_proba_histograms(data):
 
 
 def plot_histograms(data_dict, columns=BAND_COLUMNS, x_lim_dict=None, title=None, pretty_print_function=None,
-                    legend_loc='upper left', legend_size=None, norm_hist=True, log_y=False, vlines=None, bins=None):
+                    legend_loc='upper left', legend_size=None, norm_hist=False, log_y=False, vlines=None, bins=None,
+                    y_multi=None):
     color_palette = get_cubehelix_palette(len(data_dict))
     for column in columns:
 
         plt.figure()
         for i, (label, data) in enumerate(data_dict.items()):
-            ax = sns.distplot(data[column], label=label, kde=False, rug=False, norm_hist=norm_hist,
+            to_plot = data[column]
+            if y_multi:
+                to_plot = pd.concat([to_plot] * y_multi)
+            ax = sns.distplot(to_plot, label=label, kde=False, rug=False, norm_hist=norm_hist,
                               color=color_palette[i], bins=bins,
                               hist_kws={'alpha': 1.0, 'histtype': 'step', 'linewidth': 1.5,
                                         'linestyle': get_line_style(i)})

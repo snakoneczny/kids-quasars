@@ -408,9 +408,8 @@ def add_subset_info(data, extra_info=False):
     cs_safe_idx = (data['CLASS_STAR'] > 0.8) | (data['CLASS_STAR'] < 0.2)
     if extra_info:
         subsets_idx = [
-            ('extrap., r in (24, 25)', cs_safe_idx & (data['MAG_GAAP_r'] < 25)),
-            ('extrap., r in (23, 24)', cs_safe_idx & (data['MAG_GAAP_r'] < 24)),
-            ('extrap., r in (22, 23)', cs_safe_idx & (data['MAG_GAAP_r'] < 23)),
+            ('extrap., r in (23.5, 25)', cs_safe_idx & (data['MAG_GAAP_r'] < 25)),
+            ('extrap., r in (22, 23.5)', cs_safe_idx & (data['MAG_GAAP_r'] < 23.5)),
             ('safe, r < 22', cs_safe_idx & (data['MAG_GAAP_r'] < 22)),
         ]
     else:

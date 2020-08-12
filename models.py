@@ -13,6 +13,7 @@ import tensorflow_probability as tfp
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import Dense, Dropout
 from tensorflow.keras.optimizers import Adam
+from tensorflow.keras import regularizers
 from tensorflow.keras import backend as K
 from tensorflow.keras.callbacks import Callback, TensorBoard, EarlyStopping, ModelCheckpoint
 from tensorflow.keras.utils import to_categorical
@@ -141,18 +142,42 @@ class AnnClf(BaseEstimator):
 
     def create_network(self, params):
         model = Sequential()
-        model.add(Dense(128, activation='relu', input_dim=params['n_features']))
+        model.add(Dense(128, activation='relu', input_dim=params['n_features'],
+                  # kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
+                  # bias_regularizer=regularizers.l2(1e-4),
+                  # activity_regularizer=regularizers.l2(1e-5)
+                  ))
         model.add(Dropout(self.dropout_rate))
-        model.add(Dense(128, activation='relu'))
+        model.add(Dense(128, activation='relu',
+                  # kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
+                  # bias_regularizer=regularizers.l2(1e-4),
+                  # activity_regularizer=regularizers.l2(1e-5)
+                  ))
         model.add(Dropout(self.dropout_rate))
-        model.add(Dense(128, activation='relu'))
+        model.add(Dense(128, activation='relu',
+                  # kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
+                  # bias_regularizer=regularizers.l2(1e-4),
+                  # activity_regularizer=regularizers.l2(1e-5)
+                  ))
         model.add(Dropout(self.dropout_rate))
-        model.add(Dense(128, activation='relu'))
+        model.add(Dense(128, activation='relu',
+                  # kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
+                  # bias_regularizer=regularizers.l2(1e-4),
+                  # activity_regularizer=regularizers.l2(1e-5)
+                  ))
         model.add(Dropout(self.dropout_rate))
-        model.add(Dense(128, activation='relu'))
+        model.add(Dense(128, activation='relu',
+                  # kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
+                  # bias_regularizer=regularizers.l2(1e-4),
+                  # activity_regularizer=regularizers.l2(1e-5)
+                  ))
         model.add(Dropout(self.dropout_rate))
 
-        model.add(Dense(3, activation='softmax', name='category'))
+        model.add(Dense(3, activation='softmax', name='category',
+                  # kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
+                  # bias_regularizer=regularizers.l2(1e-4),
+                  # activity_regularizer=regularizers.l2(1e-5)
+                  ))
 
         opt = Adam(lr=self.lr)
 
@@ -200,7 +225,7 @@ class AnnReg(BaseEstimator):
         self.params_exp = params
         self.network = None
         self.scaler = MinMaxScaler()
-        self.patience = 300
+        self.patience = 150
         self.batch_size = 256
         self.lr = 0.0001
         self.callbacks = []
@@ -244,16 +269,47 @@ class AnnReg(BaseEstimator):
 
     def create_network(self, params):
         model = Sequential()
-        model.add(Dense(512, kernel_initializer='normal', activation='relu', input_dim=params['n_features']))
-        model.add(Dense(512, kernel_initializer='normal', activation='relu'))
-        model.add(Dense(512, kernel_initializer='normal', activation='relu'))
-        model.add(Dense(512, kernel_initializer='normal', activation='relu'))
-        model.add(Dense(512, kernel_initializer='normal', activation='relu'))
-        model.add(Dense(512, kernel_initializer='normal', activation='relu'))
-        model.add(Dense(512, kernel_initializer='normal', activation='relu'))
-
+        model.add(Dense(512, kernel_initializer='normal', activation='relu', input_dim=params['n_features'],
+                        # kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
+                        # bias_regularizer=regularizers.l2(1e-4),
+                        # activity_regularizer=regularizers.l2(1e-5)
+                        ))
+        model.add(Dense(512, kernel_initializer='normal', activation='relu',
+                        # kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
+                        # bias_regularizer=regularizers.l2(1e-4),
+                        # activity_regularizer=regularizers.l2(1e-5)
+                        ))
+        model.add(Dense(512, kernel_initializer='normal', activation='relu',
+                        # kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
+                        # bias_regularizer=regularizers.l2(1e-4),
+                        # activity_regularizer=regularizers.l2(1e-5)
+                        ))
+        model.add(Dense(512, kernel_initializer='normal', activation='relu',
+                        # kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
+                        # bias_regularizer=regularizers.l2(1e-4),
+                        # activity_regularizer=regularizers.l2(1e-5)
+                        ))
+        model.add(Dense(512, kernel_initializer='normal', activation='relu',
+                        # kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
+                        # bias_regularizer=regularizers.l2(1e-4),
+                        # activity_regularizer=regularizers.l2(1e-5)
+                        ))
+        model.add(Dense(512, kernel_initializer='normal', activation='relu',
+                        # kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
+                        # bias_regularizer=regularizers.l2(1e-4),
+                        # activity_regularizer=regularizers.l2(1e-5)
+                        ))
+        model.add(Dense(512, kernel_initializer='normal', activation='relu',
+                        # kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
+                        # bias_regularizer=regularizers.l2(1e-4),
+                        # activity_regularizer=regularizers.l2(1e-5)
+                        ))
         # Uncertainty
-        model.add(Dense(2))
+        model.add(Dense(2,
+                        kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
+                        bias_regularizer=regularizers.l2(1e-4),
+                        activity_regularizer=regularizers.l2(1e-5)
+                        ))
         model.add(tfp.layers.DistributionLambda(
             lambda t: tfd.Normal(loc=t[..., :1],
                                  scale=1e-3 + tf.math.softplus(0.05 * t[..., 1:])),

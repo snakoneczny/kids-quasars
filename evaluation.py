@@ -49,6 +49,7 @@ def experiment_report(predictions, preds_z_qso=None, preds_z_galaxy=None, test_s
     if preds_z_qso is not None:
         predictions = assign_redshift(predictions, preds_z_qso, preds_z_galaxy)
     predictions = get_preds_subset(predictions, test_subset, min_clf_proba, flag, pointlike)
+    print('Number of objects: {}'.format(predictions.shape[0]))
 
     if 'CLASS_PHOTO' in predictions.columns:
         multiclass_report(predictions, col_true=col_true)
@@ -86,7 +87,7 @@ def get_preds_subset(predictions, test_subset=None, min_clf_proba=None,
         mask = preds_subset[['QSO_PHOTO', 'GALAXY_PHOTO', 'STAR_PHOTO']].max(axis=1) > min_clf_proba
         preds_subset = preds_subset.loc[mask]
     if flag:
-        preds_subset = preds_subset.loc[preds_subset[flag] == 1]
+        preds_subset = preds_subset.loc[preds_subset[flag] != 0]
     if pointlike:
         preds_subset = preds_subset.loc[preds_subset['CLASS_STAR'] > 0.8]
     return preds_subset
@@ -230,7 +231,7 @@ def redshift_scatter_plots(predictions, z_max):
 def redshift_scatter_plot(predictions, z_pred_col, z_max, z_pred_stddev_col=None, title=None, return_figure=False):
     f, ax = plt.subplots()
     colors = predictions[z_pred_stddev_col] if z_pred_stddev_col in predictions else None
-    size = 8
+    size = 6
     points = ax.scatter(predictions['Z'], predictions[z_pred_col], alpha=0.3, cmap='rainbow_r', c=colors, s=size)
     plt.plot(range(z_max + 1))
 
