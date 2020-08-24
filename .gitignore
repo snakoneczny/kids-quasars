@@ -9,6 +9,7 @@ outputs/
 outputs/tensorboard/
 topcat_plots/
 archive/
+qsub/
 
 *.csv
 *.jpeg

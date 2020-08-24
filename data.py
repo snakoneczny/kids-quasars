@@ -41,7 +41,9 @@ def get_flag_gaap_str(band):
     return 'FLAG_GAAP_{}'.format(band)
 
 
-BANDS = ['u', 'g', 'r', 'i', 'Z', 'Y', 'J', 'H', 'Ks']
+BANDS_OPTI = ['u', 'g', 'r', 'i']
+BANDS_IR = ['Z', 'Y', 'J', 'H', 'Ks']
+BANDS = BANDS_OPTI + BANDS_IR
 BAND_NEXT_PAIRS = [('u', 'g'), ('g', 'r'), ('r', 'i'), ('i', 'Z'), ('Z', 'Y'), ('Y', 'J'), ('J', 'H'), ('H', 'Ks')]
 
 
@@ -78,10 +80,13 @@ def get_all_pairs(bands):
 
 
 BAND_COLUMNS = get_mag_gaap_cols(BANDS)
+BAND_COLUMNS_OPTI = get_mag_gaap_cols(BANDS_OPTI)
 BAND_ERR_COLUMNS = get_magerr_gaap_cols(BANDS)
 COLOR_COLUMNS = get_color_cols(get_all_pairs(BANDS))
+COLOR_COLUMNS_OPTI = get_color_cols(get_all_pairs(BANDS_OPTI))
 COLOR_NEXT_COLUMNS = get_color_cols(get_next_pairs(BANDS))
 RATIO_COLUMNS = get_ratio_cols(get_all_pairs(BANDS))
+RATIO_COLUMNS_OPTI = get_ratio_cols(get_all_pairs(BANDS_OPTI))
 FLAGS_GAAP_COLUMNS = get_flags_gaap_cols(BANDS)
 
 # Colors and ratios with feature importance higher than 1% for classification task
@@ -110,6 +115,7 @@ def get_band_features(bands):
 
 FEATURES = {
     'all': BAND_COLUMNS + COLOR_COLUMNS + RATIO_COLUMNS + ['CLASS_STAR', 'SG2DPHOT_3'],
+    'optical': BAND_COLUMNS_OPTI + COLOR_COLUMNS_OPTI + RATIO_COLUMNS_OPTI + ['CLASS_STAR', 'SG2DPHOT_3'],
     'no-sg': BAND_COLUMNS + COLOR_COLUMNS + RATIO_COLUMNS,
     'colors': COLOR_COLUMNS + RATIO_COLUMNS,
     'top-clf': BAND_COLUMNS + COLOR_COLUMNS_CLF + RATIO_COLUMNS_CLF + ['CLASS_STAR', 'SG2DPHOT_3'],

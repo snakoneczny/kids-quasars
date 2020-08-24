@@ -13,7 +13,7 @@ import healpy as hp
 import matplotlib.pyplot as plt
 import tensorflow as tf
 
-from env_config import DATA_PATH
+from env_config import DATA_PATH, PROJECT_PATH
 
 logging.basicConfig(format='%(asctime)s %(levelname)s: %(message)s', datefmt='%d/%m/%Y %H:%M:%S', level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -211,16 +211,16 @@ def get_external_qso_short_name(full_name):
 
 
 def save_predictions(predictions_df, exp_name, timestamp):
-    predictions_path = 'outputs/exp_preds/{exp_name}__{timestamp}.csv'.format(exp_name=exp_name,
-                                                                              timestamp=timestamp)
+    predictions_path = os.path.join(PROJECT_PATH, 'outputs/exp_preds/{exp_name}__{timestamp}.csv'.format(
+        exp_name=exp_name, timestamp=timestamp))
     predictions_df.to_csv(predictions_path, index=False)
     logger.info('predictions saved to: {}'.format(predictions_path))
 
 
 def save_model(model, exp_name, timestamp):
     # TODO: neural net saving
-    model_path = 'outputs/exp_models/{exp_name}__{timestamp}.joblib'.format(exp_name=exp_name,
-                                                                            timestamp=timestamp)
+    model_path = os.path.join(PROJECT_PATH, 'outputs/exp_models/{exp_name}__{timestamp}.joblib'.format(
+        exp_name=exp_name, timestamp=timestamp))
     joblib.dump(model, model_path)
     logger.info('model saved to: {}'.format(model_path))
 

@@ -1,3 +1,4 @@
+import os
 from collections.abc import Iterable
 from functools import partial
 
@@ -18,6 +19,7 @@ from tensorflow.keras import backend as K
 from tensorflow.keras.callbacks import Callback, TensorBoard, EarlyStopping, ModelCheckpoint
 from tensorflow.keras.utils import to_categorical
 
+from env_config import PROJECT_PATH
 from utils import plot_to_image
 from evaluation import redshift_scatter_plot
 from plotting import plot_confusion_matrix
@@ -107,7 +109,7 @@ class AnnClf(BaseEstimator):
         self.params_exp = params
         self.network = None
         self.scaler = MinMaxScaler()
-        self.patience = 300
+        self.patience = 10000
         self.batch_size = 512
         self.lr = 0.0001
         self.dropout_rate = 0.05
@@ -143,41 +145,41 @@ class AnnClf(BaseEstimator):
     def create_network(self, params):
         model = Sequential()
         model.add(Dense(128, activation='relu', input_dim=params['n_features'],
-                  # kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
-                  # bias_regularizer=regularizers.l2(1e-4),
-                  # activity_regularizer=regularizers.l2(1e-5)
-                  ))
+                        kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
+                        bias_regularizer=regularizers.l2(1e-4),
+                        activity_regularizer=regularizers.l2(1e-5)
+                        ))
         model.add(Dropout(self.dropout_rate))
         model.add(Dense(128, activation='relu',
-                  # kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
-                  # bias_regularizer=regularizers.l2(1e-4),
-                  # activity_regularizer=regularizers.l2(1e-5)
-                  ))
+                        kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
+                        bias_regularizer=regularizers.l2(1e-4),
+                        activity_regularizer=regularizers.l2(1e-5)
+                        ))
         model.add(Dropout(self.dropout_rate))
         model.add(Dense(128, activation='relu',
-                  # kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
-                  # bias_regularizer=regularizers.l2(1e-4),
-                  # activity_regularizer=regularizers.l2(1e-5)
-                  ))
+                        kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
+                        bias_regularizer=regularizers.l2(1e-4),
+                        activity_regularizer=regularizers.l2(1e-5)
+                        ))
         model.add(Dropout(self.dropout_rate))
         model.add(Dense(128, activation='relu',
-                  # kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
-                  # bias_regularizer=regularizers.l2(1e-4),
-                  # activity_regularizer=regularizers.l2(1e-5)
-                  ))
+                        kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
+                        bias_regularizer=regularizers.l2(1e-4),
+                        activity_regularizer=regularizers.l2(1e-5)
+                        ))
         model.add(Dropout(self.dropout_rate))
         model.add(Dense(128, activation='relu',
-                  # kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
-                  # bias_regularizer=regularizers.l2(1e-4),
-                  # activity_regularizer=regularizers.l2(1e-5)
-                  ))
+                        kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
+                        bias_regularizer=regularizers.l2(1e-4),
+                        activity_regularizer=regularizers.l2(1e-5)
+                        ))
         model.add(Dropout(self.dropout_rate))
 
         model.add(Dense(3, activation='softmax', name='category',
-                  # kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
-                  # bias_regularizer=regularizers.l2(1e-4),
-                  # activity_regularizer=regularizers.l2(1e-5)
-                  ))
+                        kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
+                        bias_regularizer=regularizers.l2(1e-4),
+                        activity_regularizer=regularizers.l2(1e-5)
+                        ))
 
         opt = Adam(lr=self.lr)
 
@@ -473,7 +475,7 @@ class CustomTensorBoard(TensorBoard):
     def __init__(self, log_folder, params, is_inference):
         self.log_folder = log_folder
         subfolder = 'inf' if is_inference else 'exp'
-        self.log_dir = './outputs/tensorboard/{}/{}'.format(subfolder, log_folder)
+        self.log_dir = os.path.join(PROJECT_PATH, 'outputs/tensorboard/{}/{}'.format(subfolder, log_folder))
         super().__init__(log_dir=self.log_dir, profile_batch=0)
 
         self.params_exp = params
