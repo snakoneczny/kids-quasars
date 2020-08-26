@@ -12,7 +12,7 @@ specialization:
 
 cut:
 
-bands: [u, g, r, i, Z, Y, J, H, Ks
+bands: [u, g, r, i, Z, Y, J, H, Ks]
 
 features_key: all
 

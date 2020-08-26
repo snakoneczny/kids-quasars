@@ -109,10 +109,10 @@ class AnnClf(BaseEstimator):
         self.params_exp = params
         self.network = None
         self.scaler = MinMaxScaler()
-        self.patience = 10000
+        self.patience = 200
         self.batch_size = 512
         self.lr = 0.0001
-        self.dropout_rate = 0.05
+        self.dropout_rate = 0.1
         self.metric_names = ['accuracy']
         self.model_path = 'outputs/inf_models/{exp_name}__{timestamp}.hdf5'.format(
             exp_name=params['exp_name'], timestamp=params['timestamp_start'])
@@ -144,42 +144,13 @@ class AnnClf(BaseEstimator):
 
     def create_network(self, params):
         model = Sequential()
-        model.add(Dense(128, activation='relu', input_dim=params['n_features'],
-                        kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
-                        bias_regularizer=regularizers.l2(1e-4),
-                        activity_regularizer=regularizers.l2(1e-5)
-                        ))
+        model.add(Dense(128, activation='relu', input_dim=params['n_features']))
         model.add(Dropout(self.dropout_rate))
-        model.add(Dense(128, activation='relu',
-                        kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
-                        bias_regularizer=regularizers.l2(1e-4),
-                        activity_regularizer=regularizers.l2(1e-5)
-                        ))
-        model.add(Dropout(self.dropout_rate))
-        model.add(Dense(128, activation='relu',
-                        kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
-                        bias_regularizer=regularizers.l2(1e-4),
-                        activity_regularizer=regularizers.l2(1e-5)
-                        ))
-        model.add(Dropout(self.dropout_rate))
-        model.add(Dense(128, activation='relu',
-                        kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
-                        bias_regularizer=regularizers.l2(1e-4),
-                        activity_regularizer=regularizers.l2(1e-5)
-                        ))
-        model.add(Dropout(self.dropout_rate))
-        model.add(Dense(128, activation='relu',
-                        kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
-                        bias_regularizer=regularizers.l2(1e-4),
-                        activity_regularizer=regularizers.l2(1e-5)
-                        ))
-        model.add(Dropout(self.dropout_rate))
+        for i in range(4):
+            model.add(Dense(128, activation='relu'))
+            model.add(Dropout(self.dropout_rate))
 
-        model.add(Dense(3, activation='softmax', name='category',
-                        kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
-                        bias_regularizer=regularizers.l2(1e-4),
-                        activity_regularizer=regularizers.l2(1e-5)
-                        ))
+        model.add(Dense(3, activation='softmax', name='category'))
 
         opt = Adam(lr=self.lr)
 
@@ -216,7 +187,7 @@ class AnnClf(BaseEstimator):
 
     def predict(self, X, encoder=None, scale_data=True, batch_size=None):
         X_to_pred = self.scaler.transform(X) if scale_data else X
-        y_pred_proba = self.network.predict(X_to_pred)
+        y_pred_proba = self.network.predict(X_to_pred, batch_size=100000)
         predictions_df = decode_clf_preds(y_pred_proba, encoder)
         return predictions_df
 
@@ -227,7 +198,7 @@ class AnnReg(BaseEstimator):
         self.params_exp = params
         self.network = None
         self.scaler = MinMaxScaler()
-        self.patience = 150
+        self.patience = 200
         self.batch_size = 256
         self.lr = 0.0001
         self.callbacks = []
@@ -271,42 +242,18 @@ class AnnReg(BaseEstimator):
 
     def create_network(self, params):
         model = Sequential()
-        model.add(Dense(512, kernel_initializer='normal', activation='relu', input_dim=params['n_features'],
-                        # kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
-                        # bias_regularizer=regularizers.l2(1e-4),
-                        # activity_regularizer=regularizers.l2(1e-5)
+        model.add(Dense(256, kernel_initializer='normal', activation='relu', input_dim=params['n_features'],
+                        kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
+                        bias_regularizer=regularizers.l2(1e-4),
+                        activity_regularizer=regularizers.l2(1e-5)
                         ))
-        model.add(Dense(512, kernel_initializer='normal', activation='relu',
-                        # kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
-                        # bias_regularizer=regularizers.l2(1e-4),
-                        # activity_regularizer=regularizers.l2(1e-5)
-                        ))
-        model.add(Dense(512, kernel_initializer='normal', activation='relu',
-                        # kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
-                        # bias_regularizer=regularizers.l2(1e-4),
-                        # activity_regularizer=regularizers.l2(1e-5)
-                        ))
-        model.add(Dense(512, kernel_initializer='normal', activation='relu',
-                        # kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
-                        # bias_regularizer=regularizers.l2(1e-4),
-                        # activity_regularizer=regularizers.l2(1e-5)
-                        ))
-        model.add(Dense(512, kernel_initializer='normal', activation='relu',
-                        # kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
-                        # bias_regularizer=regularizers.l2(1e-4),
-                        # activity_regularizer=regularizers.l2(1e-5)
-                        ))
-        model.add(Dense(512, kernel_initializer='normal', activation='relu',
-                        # kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
-                        # bias_regularizer=regularizers.l2(1e-4),
-                        # activity_regularizer=regularizers.l2(1e-5)
-                        ))
-        model.add(Dense(512, kernel_initializer='normal', activation='relu',
-                        # kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
-                        # bias_regularizer=regularizers.l2(1e-4),
-                        # activity_regularizer=regularizers.l2(1e-5)
-                        ))
-        # Uncertainty
+        for i in range(10):
+            model.add(Dense(256, kernel_initializer='normal', activation='relu',
+                            kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
+                            bias_regularizer=regularizers.l2(1e-4),
+                            activity_regularizer=regularizers.l2(1e-5)
+                            ))
+
         model.add(Dense(2,
                         kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
                         bias_regularizer=regularizers.l2(1e-4),
@@ -351,7 +298,7 @@ class AnnReg(BaseEstimator):
             self.network.load_weights(self.model_path)
 
     def predict(self, X, encoder=None, batch_size=None, scale_data=True):
-        batch_size = self.batch_size if batch_size is None else batch_size
+        batch_size = 100000  # self.batch_size if batch_size is None else batch_size
         X_to_pred = self.scaler.transform(X) if scale_data else X
         predictions_df = pd.DataFrame()
 
@@ -416,7 +363,7 @@ class AdditionalValidationSets(Callback):
 
             # Standard model evaluation on tracked metrics
             results = self.model.evaluate(x=validation_data, y=validation_targets, verbose=self.verbose,
-                                          sample_weight=sample_weights, batch_size=self.batch_size)
+                                          sample_weight=sample_weights, batch_size=100000)
             if not isinstance(results, Iterable):
                 results = [results]
             for i, result in enumerate(results):
@@ -453,8 +400,8 @@ class AdditionalValidationSets(Callback):
         log_dir = self.tensorboard_callback.log_dir + '/images'
         # TODO: create just once or close?
         file_writer = tf.summary.create_file_writer(log_dir)
-        scatter_plot = redshift_scatter_plot(predictions, z_pred_col='Z_PHOTO', z_pred_stddev_col='Z_PHOTO_STDDEV',
-                                             z_max=4, return_figure=True)
+        scatter_plot = redshift_scatter_plot(predictions, z_pred_col='Z_PHOTO', color_column='Z_PHOTO_STDDEV', z_max=4,
+                                             return_figure=True)
         scatter_image = plot_to_image(scatter_plot)
         with file_writer.as_default():
             tf.summary.image('redshift scatter - {}'.format(test_name), scatter_image, step=epoch)
@@ -471,6 +418,7 @@ class AdditionalValidationSets(Callback):
             tf.summary.image('confusion matrix - {}'.format(test_name), cm_image, step=epoch)
 
 
+# TODO: change loss name to negloglik (redshift) and cross-entropy (classification)
 class CustomTensorBoard(TensorBoard):
     def __init__(self, log_folder, params, is_inference):
         self.log_folder = log_folder

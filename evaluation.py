@@ -65,9 +65,7 @@ def experiment_report(predictions, preds_z_qso=None, preds_z_galaxy=None, test_s
 
     if 'CLASS_PHOTO' in predictions.columns and 'Z_PHOTO' in predictions.columns and 'Z' in predictions.columns:
         precision_z_report(predictions, z_max=z_max)
-        redshift_cleaning_report(predictions, cleaning='clf_proba')
-        if 'Z_PHOTO_STDDEV' in predictions:
-            redshift_cleaning_report(predictions, cleaning='z_std_dev')
+        redshift_cleaning_report(predictions)
 
 
 def add_kids_sdss_columns(data):
@@ -225,12 +223,16 @@ def redshift_scatter_plots(predictions, z_max):
     z_max = {'GALAXY': min(1, z_max), 'QSO': z_max}
     for c in ['QSO', 'GALAXY']:
         preds_c = predictions.loc[predictions['CLASS'] == c]
-        redshift_scatter_plot(preds_c, z_photo_col, z_max[c], z_pred_stddev_col=z_photo_stddev_col, title=c)
+        # Colored with redshift uncertainty
+        redshift_scatter_plot(preds_c, z_photo_col, z_max[c], color_column=z_photo_stddev_col, title=c)
+        # # Colored with classification probability
+        # redshift_scatter_plot(preds_c.loc[(preds_c['{}_PHOTO'.format(c)] > 0.5) & (preds_c['{}_PHOTO'.format(c)] < 0.6)], z_photo_col, z_max[c],
+        #                       color_column='{}_PHOTO'.format(c), title=c)
 
 
-def redshift_scatter_plot(predictions, z_pred_col, z_max, z_pred_stddev_col=None, title=None, return_figure=False):
+def redshift_scatter_plot(predictions, z_pred_col, z_max, color_column=None, title=None, return_figure=False):
     f, ax = plt.subplots()
-    colors = predictions[z_pred_stddev_col] if z_pred_stddev_col in predictions else None
+    colors = predictions[color_column] if color_column in predictions else None
     size = 6
     points = ax.scatter(predictions['Z'], predictions[z_pred_col], alpha=0.3, cmap='rainbow_r', c=colors, s=size)
     plt.plot(range(z_max + 1))
@@ -240,9 +242,9 @@ def redshift_scatter_plot(predictions, z_pred_col, z_max, z_pred_stddev_col=None
     plt.ylabel(get_plot_text(z_pred_col))
     plt.title(get_plot_text(title))
 
-    if z_pred_stddev_col in predictions:
+    if color_column in predictions:
         cb = f.colorbar(points)
-        cb.set_label(get_plot_text(z_pred_stddev_col))
+        cb.set_label(get_plot_text(color_column))
 
     plt.show()
     if return_figure:
@@ -311,14 +313,11 @@ def precision_z_report(predictions, col_true='CLASS', z_max=None):
         plt.show()
 
 
-def redshift_cleaning_report(predictions, cleaning='clf_proba'):
+def redshift_cleaning_report(predictions):
     step = 0.01
     classes = ['QSO', 'GALAXY']
     for cls in classes:
         preds_class = predictions.loc[predictions['CLASS_PHOTO'] == cls]
-        thresholds = np.arange(preds_class['Z_PHOTO_STDDEV'].min() + step, preds_class['Z_PHOTO_STDDEV'].max(),
-                               step) if cleaning == 'z_std_dev' else np.arange(0, 1, step)
-
         size_func_tuple = ('fraction of objects', partial(my_size, n=preds_class.shape[0]))
         metrics_to_plot_arr = [
             [(PLOT_TEXTS['z_err_mean'], (relative_err_mean, relative_err_std)), size_func_tuple],
@@ -326,10 +325,16 @@ def redshift_cleaning_report(predictions, cleaning='clf_proba'):
         ]
 
         for metrics_to_plot in metrics_to_plot_arr:
-            plot_cleaning_metrics(preds_class, cls, metrics_to_plot, thresholds, step, cleaning)
+            thresholds = np.arange(preds_class['Z_PHOTO_STDDEV'].min() + step, preds_class['Z_PHOTO_STDDEV'].max(),
+                                   step)
+            y_lim = plot_cleaning_metrics(preds_class, cls, metrics_to_plot, thresholds, step, cleaning='z_std_dev')
+
+            thresholds = np.arange(0, 1, step)
+            plot_cleaning_metrics(preds_class, cls, metrics_to_plot, thresholds, step, cleaning='clf_proba',
+                                  y_lim=y_lim)
 
 
-def plot_cleaning_metrics(preds_class, cls, metrics_to_plot, thresholds, step, cleaning):
+def plot_cleaning_metrics(preds_class, cls, metrics_to_plot, thresholds, step, cleaning, y_lim=None):
     fig, ax1 = plt.subplots()
     ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
     label = '{} probability threshold' if cleaning == 'clf_proba' else '{} redshift uncertainity threshold'
@@ -373,12 +378,15 @@ def plot_cleaning_metrics(preds_class, cls, metrics_to_plot, thresholds, step, c
             ax_arr[i].fill_between(thresholds_to_use, lower, upper, color=color_palette[i], alpha=0.2)
 
         ax_arr[i].tick_params(axis='y', labelcolor=color_palette[i])
-        # ax_arr[i].set_ylabel(metric_name)
+        ax_arr[i].set_ylabel(metric_name)
         plotted_arr.append(plotted)
     ax_arr[1].yaxis.grid(False)
     fig.tight_layout()  # otherwise the right y-label is slightly clipped
     plt.legend(handles=plotted_arr, loc='lower left', framealpha=1.0)
+    if y_lim:
+        ax_arr[0].set_ylim(y_lim)
     plt.show()
+    return ax_arr[0].get_ylim()
 
 
 def metric_class_split(y_true, y_pred, classes, metric):
@@ -452,7 +460,7 @@ def spatial_number_density(data_dict, nside=128, z_bin_step=0.5, z_bin_size=0.5,
     fig, ax = plt.subplots()
     to_plot_df = pd.DataFrame()
     x_col = 'z'
-    y_col = r'spatial density [N / comoving Mpc]'
+    y_col = r'spatial density [N / comoving Mpc$^3$]'
     for data_name, (data, map) in data_dict.items():
         z_column = 'Z' if 'Z' in data else 'Z_PHOTO'
         z_half_bin_size = z_bin_size / 2

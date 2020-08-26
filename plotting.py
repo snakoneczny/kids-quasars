@@ -117,37 +117,45 @@ def make_embedding_plots(data, legend_loc='upper left'):
         embedding[i, 1] = x
 
     # Photometric plots
-    x_lim, y_lim = partial_plot(embedding, data[get_mag_str('r')], title=r'$r$ magnitude', is_continuous=True,
-                                return_limits=True)
+    x_lim, y_lim = partial_plot(embedding, data[get_mag_str('r')], is_continuous=True, title='KiDS objects',
+                                legend_label=r'$r$ magnitude', return_limits=True)
     partial_plot = partial(partial_plot, x_lim=x_lim, y_lim=y_lim)
-    partial_plot(embedding, data[get_magerr_str('r')], title=r'$r$ magnitude error', is_continuous=True)
+    partial_plot(embedding, data[get_magerr_str('r')], is_continuous=True, title='KiDS objects',
+                 legend_label=r'$r$ magnitude error')
 
     # Flags
-    partial_plot(embedding, data['Flag_1'], title='Flag 1st bit', is_continuous=False)
-    partial_plot(embedding, data['Flag_2'], title='Flag 2nd bit', is_continuous=False)
-    partial_plot(embedding, data['IMAFLAGS_ISO_1'], title='IMAFLAGS_ISO 1st bit', is_continuous=False)
-    partial_plot(embedding, data['MASK_2'], title='MASK 2nd bit', is_continuous=False)
-    partial_plot(embedding, data['MASK_13'], title='MASK 13th bit', is_continuous=False)
+    partial_plot(embedding, data['Flag_1'], is_continuous=False, title='KiDS objects', legend_label='Flag 1st bit')
+    partial_plot(embedding, data['Flag_2'], is_continuous=False, title='KiDS objects', legend_label='Flag 2nd bit')
+    partial_plot(embedding, data['IMAFLAGS_ISO_1'], is_continuous=False, title='KiDS objects',
+                 legend_label='IMAFLAGS_ISO 1st bit')
+    partial_plot(embedding, data['MASK_2'], is_continuous=False, title='KiDS objects', legend_label='MASK 2nd bit')
+    partial_plot(embedding, data['MASK_13'], is_continuous=False, title='KiDS objects', legend_label='MASK 13th bit')
 
     # Point like classifiers
-    partial_plot(embedding, data['CLASS_STAR'], title='class star', is_continuous=True)
-    partial_plot(embedding, data['SG2DPHOT_3'], title='SG2DPHOT 3rd bit', is_continuous=False)
+    partial_plot(embedding, data['CLASS_STAR'], is_continuous=True, title='KiDS objects', legend_label='class star')
+    partial_plot(embedding, data['SG2DPHOT_3'], is_continuous=False, title='KiDS objects',
+                 legend_label='SG2DPHOT 3rd bit')
 
     # Inference subsets
     if 'subset' in data:
-        partial_plot(embedding, data['subset'], title='inference subset')
+        partial_plot(embedding, data['subset'], is_continuous=False, title='KiDS objects')
     if 'is_train' in data:
-        partial_plot(embedding, data['is_train'], title='used in training')
+        partial_plot(embedding, data['is_train'], is_continuous=False, title='KiDS objects',
+                     legend_label='used in training')
 
     # Classification plots
     if 'CLASS' in data:
-        partial_plot(embedding, data['CLASS'], title='class')
+        partial_plot(embedding, data['CLASS'], is_continuous=False, title='KiDS objects',
+                     legend_label=r'class$_{spec}$')
         if (data['CLASS'] == 'no class').any():
             idx = data['CLASS'] != 'no class'
-            partial_plot(embedding[idx], data.loc[idx, 'CLASS'], title=r'class$_{spec}$')
+            partial_plot(embedding[idx], data.loc[idx, 'CLASS'], is_continuous=False, title='KiDSxSDSS objects',
+                         legend_label=r'class$_{spec}$')
     if 'CLASS_PHOTO' in data:
-        partial_plot(embedding, data['CLASS_PHOTO'], title=r'class$_{photo}$')
-        partial_plot(embedding, data['QSO_PHOTO'], title=r'QSO$_{photo}$ probability', is_continuous=True)
+        partial_plot(embedding, data['CLASS_PHOTO'], is_continuous=False, title='KiDS objects',
+                     legend_label=r'class$_{photo}$')
+        partial_plot(embedding, data['QSO_PHOTO'], is_continuous=True, title='KiDS objects',
+                     legend_label=r'QSO$_{candidate}$ probability')
 
         # Final cuts
         data['catalog'] = 'None'
@@ -156,35 +164,40 @@ def make_embedding_plots(data, legend_loc='upper left'):
         for extrap_subset in ['extrap., r in (22, 23.5)', 'extrap., r in (23.5, 25)']:
             idx = (data['subset'] == extrap_subset) & (data['QSO_PHOTO'] > 0.98)
             data.loc[idx, 'catalog'] = extrap_subset
-        partial_plot(embedding, data['catalog'], title=r'final catalog QSO$_{photo}$')
+        partial_plot(embedding, data['catalog'], is_continuous=False, title=r'final catalog QSO$_{candidate}$')
 
     # Redshift plots
     if 'Z' in data:
-        partial_plot(embedding, data['Z'], title=r'z$_{spec}$', is_continuous=True)
+        partial_plot(embedding, data['Z'], is_continuous=True, title=r'KiDSxSDSS objects',
+                     legend_label=r'z$_{spec}$')
     if 'Z_B' in data:
-        partial_plot(embedding, data['Z_B'], title='z$_B$', is_continuous=True)
+        partial_plot(embedding, data['Z_B'], is_continuous=True, title='KiDS observations', legend_label='$z_B$')
     if 'Z_PHOTO' in data:
         idx = (data['CLASS_PHOTO'] == 'QSO')
-        partial_plot(embedding[idx], data.loc[idx]['Z_PHOTO'], title=r'z$_{photo}(QSO_{photo})$', is_continuous=True)
-
+        partial_plot(embedding[idx], data.loc[idx]['Z_PHOTO'], is_continuous=True, title=r'$QSO_{candidate}$',
+                     legend_label=r'$z_{photo}$')
         idx = ((data['CLASS_PHOTO'] == 'QSO') & (data['catalog'] != 'None'))
-        partial_plot(embedding[idx], data.loc[idx]['Z_PHOTO'], title=r'final catalog z$_{photo}(QSO_{photo})$',
-                     is_continuous=True)
+        partial_plot(embedding[idx], data.loc[idx]['Z_PHOTO'], is_continuous=True,
+                     title=r'final catalog $QSO_{candidate}$', legend_label=r'$z_{photo}$')
 
     if 'Z_PHOTO_STDDEV' in data:
         idx = (data['CLASS_PHOTO'] == 'QSO')
-        partial_plot(embedding[idx], data.loc[idx]['Z_PHOTO_STDDEV'], title='photo z uncertainty', is_continuous=True)
+        partial_plot(embedding[idx], data.loc[idx]['Z_PHOTO_STDDEV'], is_continuous=True, title=r'$QSO_{candidate}$',
+                     legend_label='$z_{photo}$ uncertainty')
 
 
 def plot_embedding(embedding, labels, title='class', is_continuous=False, alpha=0.5, color_palette='cubehelix',
                    with_custom_colors=True, labels_in_order=True, legend_loc='upper left', return_limits=False,
-                   x_lim=None, y_lim=None):
+                   x_lim=None, y_lim=None, legend_label=None):
     fig_scale = 1.8
     point_size = 30
     if is_continuous:
         f, ax = plt.subplots(figsize=(6 * fig_scale, 4 * fig_scale))
         points = ax.scatter(embedding[:, 0], embedding[:, 1], c=labels, s=point_size, cmap='gnuplot_r', alpha=alpha)
-        plt.colorbar(points, pad=0.01)
+        cbar = plt.colorbar(points, pad=0.01)
+        if legend_label:
+            cbar.ax.get_yaxis().labelpad = 4
+            cbar.ax.set_ylabel(legend_label, rotation=90)
 
     else:
         labels_unique = np.unique(labels)
@@ -202,7 +215,7 @@ def plot_embedding(embedding, labels, title='class', is_continuous=False, alpha=
             idx = np.where(labels == label)[0]
             colors = [color_palette[label] for _ in range(idx.shape[0])]
             ax.scatter(embedding[idx, 0], embedding[idx, 1], c=colors, label=label, s=point_size, alpha=alpha)
-        plt.legend(loc=legend_loc, framealpha=1.0)
+        plt.legend(loc=legend_loc, framealpha=1.0, title=legend_label)
 
     plt.title(pretty_print_feature(title))
     ax.set_aspect('equal')
