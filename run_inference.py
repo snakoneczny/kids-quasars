@@ -102,6 +102,7 @@ else:
 
 # Store predictions
 catalog_df = pd.concat([data[['ID', 'RAJ2000', 'DECJ2000', 'MAG_GAAP_r', 'CLASS_STAR', 'MASK']], preds], axis=1)
+# TODO: Save information on train/validation split
 catalog_df['is_train'] = catalog_df['ID'].isin(train_data['ID'])
 if args.save:
     save_catalog(catalog_df, exp_name=cfg['exp_name'], timestamp=cfg['timestamp_start'])

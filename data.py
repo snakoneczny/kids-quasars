@@ -410,14 +410,22 @@ def merge_specialized_catalogs(ctlg_clf, ctlg_z_qso, ctlg_z_galaxy=None):
     return catalog
 
 
-def add_subset_info(data, extra_info=False):
+def add_subset_info(data, extra_info=False, every_mag=False):
     cs_safe_idx = (data['CLASS_STAR'] > 0.8) | (data['CLASS_STAR'] < 0.2)
     if extra_info:
-        subsets_idx = [
-            ('extrap., r in (23.5, 25)', cs_safe_idx & (data['MAG_GAAP_r'] < 25)),
-            ('extrap., r in (22, 23.5)', cs_safe_idx & (data['MAG_GAAP_r'] < 23.5)),
-            ('safe, r < 22', cs_safe_idx & (data['MAG_GAAP_r'] < 22)),
-        ]
+        if every_mag:
+            subsets_idx = [
+                ('extrap., 24 < r < 25', cs_safe_idx & (data['MAG_GAAP_r'] < 25)),
+                ('extrap., 23 < r < 24', cs_safe_idx & (data['MAG_GAAP_r'] < 24)),
+                ('extrap., 22 < r < 23', cs_safe_idx & (data['MAG_GAAP_r'] < 23)),
+                ('safe, r < 22', cs_safe_idx & (data['MAG_GAAP_r'] < 22)),
+            ]
+        else:
+            subsets_idx = [
+                ('extrap., 23.5 < r < 25', cs_safe_idx & (data['MAG_GAAP_r'] < 25)),
+                ('extrap., 22 < r < 23.5', cs_safe_idx & (data['MAG_GAAP_r'] < 23.5)),
+                ('safe, r < 22', cs_safe_idx & (data['MAG_GAAP_r'] < 22)),
+            ]
     else:
         subsets_idx = [
             ('extrapolation', cs_safe_idx & (data['MAG_GAAP_r'] < 25)),

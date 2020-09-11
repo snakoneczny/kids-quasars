@@ -3,6 +3,7 @@ import math
 from collections.__init__ import defaultdict, OrderedDict
 import multiprocessing
 from functools import partial
+import warnings
 
 import numpy as np
 import pandas as pd
@@ -69,14 +70,18 @@ def experiment_report(predictions, preds_z_qso=None, preds_z_galaxy=None, test_s
 
 
 def add_kids_sdss_columns(data):
-    kids_x_sdss = read_fits_to_pandas(os.path.join(DATA_PATH, 'KiDS/DR4/KiDS.DR4.x.SDSS.DR14.fits'),
-                                      ['ID', 'Z_B', 'Z_ML', 'Flag', 'IMAFLAGS_ISO', 'MASK', 'CLASS_STAR'])
-    kids_x_sdss = process_bitmaps(kids_x_sdss)
-    return data.merge(kids_x_sdss, on=['ID'])
+    if 'ID' in data.columns:
+        kids_x_sdss = read_fits_to_pandas(os.path.join(DATA_PATH, 'KiDS/DR4/KiDS.DR4.x.SDSS.DR14.fits'),
+                                          ['ID', 'MAG_GAAP_r', 'Z_B', 'Z_ML', 'Flag', 'IMAFLAGS_ISO', 'MASK',
+                                           'CLASS_STAR'])
+        kids_x_sdss = process_bitmaps(kids_x_sdss)
+        return data.merge(kids_x_sdss, on=['ID'])
+    else:
+        warnings.warn('KiDS columns not added due to lack of KiDS ID column')
+        return data
 
 
-def get_preds_subset(predictions, test_subset=None, min_clf_proba=None,
-                     flag=None, pointlike=None):
+def get_preds_subset(predictions, test_subset=None, min_clf_proba=None, flag=None, pointlike=None):
     preds_subset = predictions.copy()
     if test_subset:
         mask = predictions['test_subset'] == test_subset
@@ -325,9 +330,11 @@ def redshift_cleaning_report(predictions):
         ]
 
         for metrics_to_plot in metrics_to_plot_arr:
-            thresholds = np.arange(preds_class['Z_PHOTO_STDDEV'].min() + step, preds_class['Z_PHOTO_STDDEV'].max(),
-                                   step)
-            y_lim = plot_cleaning_metrics(preds_class, cls, metrics_to_plot, thresholds, step, cleaning='z_std_dev')
+            y_lim = None
+            if 'Z_PHOTO_STDDEV' in preds_class:
+                thresholds = np.arange(preds_class['Z_PHOTO_STDDEV'].min() + step, preds_class['Z_PHOTO_STDDEV'].max(),
+                                       step)
+                y_lim = plot_cleaning_metrics(preds_class, cls, metrics_to_plot, thresholds, step, cleaning='z_std_dev')
 
             thresholds = np.arange(0, 1, step)
             plot_cleaning_metrics(preds_class, cls, metrics_to_plot, thresholds, step, cleaning='clf_proba',
@@ -412,15 +419,19 @@ def number_counts(data_dict, linear_data, nside=128, step=.1, band_column='MAG_G
         m_min = int(math.ceil(data[band_column].min()))
         m_max = int(math.ceil(data[band_column].max()))
         magnitude_arr = np.arange(m_min, m_max + step, step)
-        density_arr = []
+        density_mean_arr, density_error_arr = [], []
         for m_max in magnitude_arr:
             data_m_max = data.loc[data[band_column] < m_max]
             map_m_max, _, _ = get_map(data_m_max[ra_col], data_m_max[dec_col], nside=nside)
-            density_arr.append(map_m_max[mask_non_zero].mean() / hp.nside2pixarea(nside, degrees=True))
+            densities = map_m_max[mask_non_zero] / hp.nside2pixarea(nside, degrees=True)
+            (mu, sigma) = stats.norm.fit(densities)
+            density_mean_arr.append(mu)
+            density_error_arr.append(sigma / math.sqrt(densities.shape[0]))
 
         to_plot_df = to_plot_df.append(pd.DataFrame({
             x_col: magnitude_arr,
-            y_col: density_arr,
+            y_col: density_mean_arr,
+            'error': density_error_arr,
             'data name': [data_name] * len(magnitude_arr),
         }), ignore_index=True)
 
@@ -428,6 +439,13 @@ def number_counts(data_dict, linear_data, nside=128, step=.1, band_column='MAG_G
     sns.lineplot(x=x_col, y=y_col, data=to_plot_df, hue='data name', palette=color_palette, style='data name',
                  markers=True)
     plot_linear_data(linear_data)
+
+    ax = plt.gca()
+    for i, data_name in enumerate(to_plot_df['data name'].unique()):
+        to_plot_single_data = to_plot_df.loc[to_plot_df['data name'] == data_name]
+        lower = to_plot_single_data[y_col].values - to_plot_single_data['error'].values / 2
+        upper = to_plot_single_data[y_col].values + to_plot_single_data['error'].values / 2
+        ax.fill_between(to_plot_single_data[x_col], lower, upper, color=color_palette[i], alpha=0.2)
 
     plt.yscale('log')
     handles, labels = ax.get_legend_handles_labels()
@@ -457,6 +475,8 @@ def plot_linear_data(data, annotations=True):
 
 def spatial_number_density(data_dict, nside=128, z_bin_step=0.5, z_bin_size=0.5, cosmo_model=cosmo_wmap9,
                            z_max=None, legend_size=None):
+    volume_proportion = (hp.nside2pixarea(nside, degrees=True) / 41253.0)
+
     fig, ax = plt.subplots()
     to_plot_df = pd.DataFrame()
     x_col = 'z'
@@ -467,32 +487,41 @@ def spatial_number_density(data_dict, nside=128, z_bin_step=0.5, z_bin_size=0.5,
         steps = np.arange(data[z_column].min() + z_half_bin_size, data[z_column].max() + z_half_bin_size, z_bin_step)
         comoving_volumes = np.array([(cosmo_model.comoving_volume(step + z_half_bin_size)
                                       - cosmo_model.comoving_volume(step - z_half_bin_size)).value for step in steps])
-
-        # mask_data = data if mask_data is None else mask_data
-        # map, _, _ = get_map(mask_data[ra_col], mask_data[dec_col], nside=nside)
         mask_non_zero = np.nonzero(map)
         print('{} area: {:.2f} deg^2'.format(data_name, len(mask_non_zero[0]) * hp.nside2pixarea(nside, degrees=True)))
 
-        density_v_max = []
+        density_v_max_mean, density_v_max_error = [], []
         (ra_col, dec_col) = ('RAJ2000', 'DECJ2000') if ('RAJ2000' in data) else ('RA', 'DEC')
-        for step in steps:
+        for i, step in enumerate(steps):
             data_step = data.loc[(data[z_column] > step - z_half_bin_size) & (data[z_column] < step + z_half_bin_size)]
             step_map, _, _ = get_map(data_step[ra_col], data_step[dec_col], v=data_step['v_weight'].values, nside=nside)
-            density_v_max.append(step_map[mask_non_zero].mean())
-        density_v_max = np.array(density_v_max)
+            v_max_values = step_map[mask_non_zero] / comoving_volumes[i] / volume_proportion
+            (mu, sigma) = stats.norm.fit(v_max_values)
+            density_v_max_mean.append(mu)
+            density_v_max_error.append(sigma / math.sqrt(v_max_values.shape[0]))
 
-        volume_proportion = (hp.nside2pixarea(nside, degrees=True) / 41253.0)
-        comoving_v_max_densities = (density_v_max / comoving_volumes / volume_proportion)
+        density_v_max_mean = np.array(density_v_max_mean)
+        density_v_max_error = np.array(density_v_max_error)
+
+        # comoving_v_max_densities = (density_v_max_mean / comoving_volumes / volume_proportion)
 
         to_plot_df = to_plot_df.append(pd.DataFrame({
             x_col: steps,
-            y_col: comoving_v_max_densities,
+            y_col: density_v_max_mean,
+            'error': density_v_max_error,
             'data name': [data_name] * len(steps),
         }), ignore_index=True)
 
     color_palette = get_cubehelix_palette(len(data_dict), reverse=False) if len(data_dict) > 1 else [(0, 0, 0)]
     sns.lineplot(x=x_col, y=y_col, data=to_plot_df, hue='data name', palette=color_palette, style='data name',
                  markers=True, dashes=False)
+
+    ax = plt.gca()
+    for i, data_name in enumerate(to_plot_df['data name'].unique()):
+        to_plot_single_data = to_plot_df.loc[to_plot_df['data name'] == data_name]
+        lower = to_plot_single_data[y_col].values - to_plot_single_data['error'].values / 2
+        upper = to_plot_single_data[y_col].values + to_plot_single_data['error'].values / 2
+        ax.fill_between(to_plot_single_data[x_col], lower, upper, color=color_palette[i], alpha=0.2)
 
     plt.xlim(right=z_max)
     plt.yscale('log')
@@ -771,7 +800,7 @@ def proba_motion_analysis(data_x_gaia, motions=None, x_lim=(0.3, 1), step=0.004,
                 ax.set_xlim(x_lim)
 
             plt.xlabel('minimum classification probability')
-            plt.ylabel('{} {}'.format(t[1], '[mas]'))
+            plt.ylabel('{} parallax {}'.format(t[1], '[mas]'))
 
         if label:
             plt.legend(framealpha=1.0)

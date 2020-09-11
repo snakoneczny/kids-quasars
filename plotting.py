@@ -9,7 +9,8 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 
 from utils import pretty_print_feature
-from data import EXTERNAL_QSO, BASE_CLASSES, BAND_COLUMNS, process_2df, read_fits_to_pandas, get_mag_str, get_magerr_str
+from data import EXTERNAL_QSO, BASE_CLASSES, BAND_COLUMNS, process_2df, read_fits_to_pandas, get_mag_str,\
+    get_magerr_str, add_subset_info
 
 COLOR_QSO = (0.08605633600581403, 0.23824692404212, 0.30561236308077167)
 COLOR_STAR = (0.7587183008012618, 0.7922069335474338, 0.9543861221913403)
@@ -36,11 +37,11 @@ LABELS_ORDER = [
     'safe',
     'safe, r < 22',
     'extrapolation',
-    'extrap., r in (22, 23)',
-    'extrap., r in (22, 23.5)',
-    'extrap., r in (23, 24)',
-    'extrap., r in (23.5, 25)',
-    'extrap., r in (24, 25)',
+    'extrap., 22 < r < 23',
+    'extrap., 22 < r < 23.5',
+    'extrap., 23 < r < 24',
+    'extrap., 23.5 < r < 25',
+    'extrap., 24 < r < 25',
     'extrap., r > 25',
     'unsafe',
     'QSO',
@@ -138,7 +139,14 @@ def make_embedding_plots(data, legend_loc='upper left'):
 
     # Inference subsets
     if 'subset' in data:
-        partial_plot(embedding, data['subset'], is_continuous=False, title='KiDS objects')
+        partial_plot(embedding, data['subset'], is_continuous=False, title='KiDS objects',
+                     legend_label='inference subset')
+        # TODO: ugly workaround
+        tmp = data.copy()
+        tmp = add_subset_info(tmp, extra_info=True, every_mag=True)
+        partial_plot(embedding, tmp['subset'], is_continuous=False, title='KiDS objects',
+                     legend_label='inference subset')
+
     if 'is_train' in data:
         partial_plot(embedding, data['is_train'], is_continuous=False, title='KiDS objects',
                      legend_label='used in training')
@@ -161,7 +169,7 @@ def make_embedding_plots(data, legend_loc='upper left'):
         data['catalog'] = 'None'
         idx = (data['subset'] == 'safe, r < 22') & (data['QSO_PHOTO'] > 0.9)
         data.loc[idx, 'catalog'] = 'safe, r < 22'
-        for extrap_subset in ['extrap., r in (22, 23.5)', 'extrap., r in (23.5, 25)']:
+        for extrap_subset in ['extrap., 22 < r < 23.5', 'extrap., 23.5 < r < 25']:
             idx = (data['subset'] == extrap_subset) & (data['QSO_PHOTO'] > 0.98)
             data.loc[idx, 'catalog'] = extrap_subset
         partial_plot(embedding, data['catalog'], is_continuous=False, title=r'final catalog QSO$_{candidate}$')
