@@ -252,13 +252,6 @@ def assign_redshift(preds_clf, preds_z_qso, preds_z_galaxy):
     return preds_clf
 
 
-def add_shape_info(data):
-    data['shape'] = 'not known'
-    data.loc[data['CLASS_STAR'] < 0.2, 'shape'] = 'extended'
-    data.loc[data['CLASS_STAR'] > 0.8, 'shape'] = 'point'
-    return data
-
-
 def plot_to_image(figure):
     """Converts the matplotlib plot specified by 'figure' to a PNG image and
     returns it. The supplied figure is closed and inaccessible after this call."""

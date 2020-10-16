@@ -192,7 +192,7 @@ def completeness_z_report(predictions, col_true='CLASS', z_max=None):
             ax.set(yscale='log')
 
         plt.title(get_plot_text(class_true))
-        plt.xlabel(r'$z_{spec}$')
+        plt.xlabel(r'$\rm z_{spec}$')
         plt.ylabel('counts per bin')
         plt.legend(loc='upper right', framealpha=1.0)
         plt.show()
@@ -448,9 +448,9 @@ def number_counts(data_dict, linear_data, nside=128, step=.1, band_column='MAG_G
         ax.fill_between(to_plot_single_data[x_col], lower, upper, color=color_palette[i], alpha=0.2)
 
     plt.yscale('log')
-    handles, labels = ax.get_legend_handles_labels()
+    # handles, labels = ax.get_legend_handles_labels()
     prop = {'size': legend_size} if legend_size else {}
-    ax.legend(handles=handles[1:], labels=labels[1:], loc=legend_loc, framealpha=1.0, prop=prop)
+    ax.legend(loc=legend_loc, framealpha=1.0, prop=prop)  # handles=handles[1:], labels=labels[1:],
     plt.setp(ax.get_legend().get_texts(), fontsize='9')
     plt.show()
 
@@ -525,9 +525,9 @@ def spatial_number_density(data_dict, nside=128, z_bin_step=0.5, z_bin_size=0.5,
 
     plt.xlim(right=z_max)
     plt.yscale('log')
-    handles, labels = ax.get_legend_handles_labels()
+    # handles, labels = ax.get_legend_handles_labels()
     prop = {'size': legend_size} if legend_size else {}
-    ax.legend(handles=handles[1:], labels=labels[1:], loc='upper right', framealpha=1.0, prop=prop)
+    ax.legend(loc='upper right', framealpha=1.0, prop=prop)  # handles=handles[1:], labels=labels[1:],
     plt.setp(ax.get_legend().get_texts(), fontsize='9')
     plt.show()
 

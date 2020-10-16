@@ -410,7 +410,14 @@ def merge_specialized_catalogs(ctlg_clf, ctlg_z_qso, ctlg_z_galaxy=None):
     return catalog
 
 
-def add_subset_info(data, extra_info=False, every_mag=False):
+def add_shape_info(data, low_class_star=0.2, high_class_star=0.8):
+    data['shape'] = 'not known'
+    data.loc[data['CLASS_STAR'] < low_class_star, 'shape'] = 'extended'
+    data.loc[data['CLASS_STAR'] > high_class_star, 'shape'] = 'point'
+    return data
+
+
+def add_subset_info(data, extra_info=False, every_mag=False, is_plot=False):
     cs_safe_idx = (data['CLASS_STAR'] > 0.8) | (data['CLASS_STAR'] < 0.2)
     if extra_info:
         if every_mag:
@@ -433,6 +440,11 @@ def add_subset_info(data, extra_info=False, every_mag=False):
         ]
     data['subset'] = 'unsafe'
     for subset_name, subset_idx in subsets_idx:
+        # Add equations if to plot
+        if is_plot:
+            splitted = subset_name.split(',')
+            if len(splitted) > 1:
+                subset_name = '{}, ${}$'.format(splitted[0], splitted[1].strip())
         data.loc[subset_idx, 'subset'] = subset_name
     return data
 

@@ -112,7 +112,7 @@ class AnnClf(BaseEstimator):
         self.patience = 200
         self.batch_size = 512
         self.lr = 0.0001
-        self.dropout_rate = 0.1
+        self.dropout_rate = 0.05
         self.metric_names = ['accuracy']
         self.model_path = 'outputs/inf_models/{exp_name}__{timestamp}.hdf5'.format(
             exp_name=params['exp_name'], timestamp=params['timestamp_start'])
@@ -242,23 +242,11 @@ class AnnReg(BaseEstimator):
 
     def create_network(self, params):
         model = Sequential()
-        model.add(Dense(256, kernel_initializer='normal', activation='relu', input_dim=params['n_features'],
-                        kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
-                        bias_regularizer=regularizers.l2(1e-4),
-                        activity_regularizer=regularizers.l2(1e-5)
-                        ))
+        model.add(Dense(256, kernel_initializer='normal', activation='relu', input_dim=params['n_features']))
         for i in range(10):
-            model.add(Dense(256, kernel_initializer='normal', activation='relu',
-                            kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
-                            bias_regularizer=regularizers.l2(1e-4),
-                            activity_regularizer=regularizers.l2(1e-5)
-                            ))
+            model.add(Dense(256, kernel_initializer='normal', activation='relu'))
 
-        model.add(Dense(2,
-                        kernel_regularizer=regularizers.l1_l2(l1=1e-5, l2=1e-4),
-                        bias_regularizer=regularizers.l2(1e-4),
-                        activity_regularizer=regularizers.l2(1e-5)
-                        ))
+        model.add(Dense(2))
         model.add(tfp.layers.DistributionLambda(
             lambda t: tfd.Normal(loc=t[..., :1],
                                  scale=1e-3 + tf.math.softplus(0.05 * t[..., 1:])),

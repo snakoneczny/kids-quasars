@@ -18,11 +18,17 @@ COLOR_GALAXY = (0.32927729263408284, 0.4762845556584382, 0.1837155549758328)
 
 CUSTOM_COLORS = {
     'QSO': COLOR_QSO,
+    r'$\rm QSO_{spec}$': COLOR_QSO,
     'QSO_PHOTO': COLOR_QSO,
+    r'$\rm QSO_{cand}$': COLOR_QSO,
     'STAR': COLOR_STAR,
+    r'$\rm star_{spec}$': COLOR_STAR,
     'STAR_PHOTO': COLOR_STAR,
+    r'$\rm star_{cand}$': COLOR_STAR,
     'GALAXY': COLOR_GALAXY,
+    r'$\rm galaxy_{spec}$': COLOR_GALAXY,
     'GALAXY_PHOTO': COLOR_GALAXY,
+    r'$\rm galaxy_{cand}$': COLOR_GALAXY,
     'not SDSS': (0.8146245329198283, 0.49548316572322215, 0.5752525936416857),
     'no class': (0.8146245329198283, 0.49548316572322215, 0.5752525936416857),
     'UNKNOWN': (0.6, 0.6, 0.6),
@@ -35,21 +41,27 @@ MARKERS = ['o', 'x', 's', '+', 'p', 'h', 'H']
 
 LABELS_ORDER = [
     'safe',
-    'safe, r < 22',
+    'safe, $r < 22$',
     'extrapolation',
-    'extrap., 22 < r < 23',
-    'extrap., 22 < r < 23.5',
-    'extrap., 23 < r < 24',
-    'extrap., 23.5 < r < 25',
-    'extrap., 24 < r < 25',
-    'extrap., r > 25',
+    'extrap., $22 < r < 23$',
+    'extrap., $22 < r < 23.5$',
+    'extrap., $23 < r < 24$',
+    'extrap., $23.5 < r < 25$',
+    'extrap., $24 < r < 25$',
+    'extrap., $r > 25$',
     'unsafe',
     'QSO',
+    r'$\rm QSO_{spec}$',
     'QSO_PHOTO',
+    r'$\rm QSO_{cand}$',
     'STAR',
+    r'$\rm star_{spec}$',
     'STAR_PHOTO',
+    r'$\rm star_{cand}$',
     'GALAXY',
+    r'$\rm galaxy_{spec}$',
     'GALAXY_PHOTO',
+    r'$\rm galaxy_{cand}$',
     'not SDSS',
     'no class',
     'UNKNOWN',
@@ -58,30 +70,30 @@ LABELS_ORDER = [
 ]
 
 PLOT_TEXTS = {
-    'GALAXY': r'$galaxy_{spec}$',
-    'STAR': r'$star_{spec}$',
-    'QSO': r'$QSO_{spec}$',
-    'GALAXY_PHOTO': r'$galaxy_{photo}$',
-    'STAR_PHOTO': r'$star_{photo}$',
-    'QSO_PHOTO': r'$QSO_{photo}$',
-    'Z': r'$z_{spec}$',
-    'Z_PHOTO': r'$z_{photo}$',
-    'Z_PHOTO_WSPEC': r'$z_{photo}$',
-    'Z_PHOTO_STDDEV': r'$z_{photo}$ std. dev.',
-    'Z_PHOTO_STDDEV_WSPEC': r'$z_{photo}$ std. dev.',
-    'Z_B': r'$z_{B}$',
-    'Z_ML': r'$Z_{ML}$',
-    'z_err_mean': r'mean $\frac{z_{photo} - z_{spec}}{1 + z_{spec}}$',
-    'z_err_std': r'std. dev. $\frac{z_{photo} - z_{spec}}{1 + z_{spec}}$',
+    'GALAXY': r'$\rm galaxy_{spec}$',
+    'STAR': r'$\rm star_{spec}$',
+    'QSO': r'$\rm QSO_{spec}$',
+    'GALAXY_PHOTO': r'$\rm galaxy_{cand}$',
+    'STAR_PHOTO': r'$\rm star_{cand}$',
+    'QSO_PHOTO': r'$\rm QSO_{cand}$',
+    'Z': r'$\rm z_{spec}$',
+    'Z_PHOTO': r'$\rm z_{photo}$',
+    'Z_PHOTO_WSPEC': r'$\rm z_{photo}$',
+    'Z_PHOTO_STDDEV': r'$\rm z_{photo}$ std. dev.',
+    'Z_PHOTO_STDDEV_WSPEC': r'$\rm z_{photo}$ std. dev.',
+    'Z_B': r'$\rm z_{B}$',
+    'Z_ML': r'$\rm Z_{ML}$',
+    'z_err_mean': r'mean $\rm \frac{\rm z_{\rm photo} - z_{\rm spec}}{\rm 1 + z_{\rm spec}}$',
+    'z_err_std': r'std. dev. $\rm \frac{\rm z_{\rm photo} - z_{\rm spec}}{\rm 1 + z_{\rm spec}}$',
 }
 
 
 def get_plot_text(str, is_photo=False):
     if not str:
         return None
-    plot_text = PLOT_TEXTS[str]
+    plot_text = PLOT_TEXTS[str] if str in PLOT_TEXTS else str
     if is_photo:
-        plot_text = plot_text.replace('spec', 'photo')
+        plot_text = plot_text.replace('spec', 'cand')
     return plot_text
 
 
@@ -109,6 +121,7 @@ def get_cubehelix_palette(n, reverse=True):
 
 
 def make_embedding_plots(data, legend_loc='upper left'):
+    data = add_subset_info(data, extra_info=True, every_mag=False, is_plot=True)
     embedding = data[['t-SNE x', 't-SNE y']].values
     partial_plot = partial(plot_embedding, legend_loc=legend_loc)
 
@@ -143,7 +156,7 @@ def make_embedding_plots(data, legend_loc='upper left'):
                      legend_label='inference subset')
         # TODO: ugly workaround
         tmp = data.copy()
-        tmp = add_subset_info(tmp, extra_info=True, every_mag=True)
+        tmp = add_subset_info(tmp, extra_info=True, every_mag=True, is_plot=True)
         partial_plot(embedding, tmp['subset'], is_continuous=False, title='KiDS objects',
                      legend_label='inference subset')
 
@@ -153,45 +166,45 @@ def make_embedding_plots(data, legend_loc='upper left'):
 
     # Classification plots
     if 'CLASS' in data:
-        partial_plot(embedding, data['CLASS'], is_continuous=False, title='KiDS objects',
-                     legend_label=r'class$_{spec}$')
+        labels = data['CLASS'].apply(lambda cls: get_plot_text(cls, is_photo=False))
+        partial_plot(embedding, labels, is_continuous=False, title='KiDS objects', legend_label=None)
         if (data['CLASS'] == 'no class').any():
+            labels = data['CLASS'].apply(lambda cls: get_plot_text(cls, is_photo=False))
             idx = data['CLASS'] != 'no class'
-            partial_plot(embedding[idx], data.loc[idx, 'CLASS'], is_continuous=False, title='KiDSxSDSS objects',
-                         legend_label=r'class$_{spec}$')
+            partial_plot(embedding[idx], labels.loc[idx], is_continuous=False, title='KiDSxSDSS objects')
     if 'CLASS_PHOTO' in data:
-        partial_plot(embedding, data['CLASS_PHOTO'], is_continuous=False, title='KiDS objects',
-                     legend_label=r'class$_{photo}$')
+        labels = data['CLASS_PHOTO'].apply(lambda cls: get_plot_text(cls, is_photo=True))
+        partial_plot(embedding, labels, is_continuous=False, title='KiDS objects', legend_label=None)
         partial_plot(embedding, data['QSO_PHOTO'], is_continuous=True, title='KiDS objects',
-                     legend_label=r'QSO$_{candidate}$ probability')
+                     legend_label=r'$\rm QSO_{candidate}$ probability')
 
         # Final cuts
         data['catalog'] = 'None'
-        idx = (data['subset'] == 'safe, r < 22') & (data['QSO_PHOTO'] > 0.9)
-        data.loc[idx, 'catalog'] = 'safe, r < 22'
-        for extrap_subset in ['extrap., 22 < r < 23.5', 'extrap., 23.5 < r < 25']:
+        idx = (data['subset'] == 'safe, $r < 22$') & (data['QSO_PHOTO'] > 0.9)
+        data.loc[idx, 'catalog'] = 'safe, $r < 22$'
+        for extrap_subset in ['extrap., $22 < r < 23.5$', 'extrap., $23.5 < r < 25$']:
             idx = (data['subset'] == extrap_subset) & (data['QSO_PHOTO'] > 0.98)
             data.loc[idx, 'catalog'] = extrap_subset
-        partial_plot(embedding, data['catalog'], is_continuous=False, title=r'final catalog QSO$_{candidate}$')
+        partial_plot(embedding, data['catalog'], is_continuous=False, title=r'final catalog $\rm QSO_{candidate}$')
 
     # Redshift plots
     if 'Z' in data:
         partial_plot(embedding, data['Z'], is_continuous=True, title=r'KiDSxSDSS objects',
-                     legend_label=r'z$_{spec}$')
+                     legend_label=r'$\rm z_{spec}$')
     if 'Z_B' in data:
-        partial_plot(embedding, data['Z_B'], is_continuous=True, title='KiDS observations', legend_label='$z_B$')
+        partial_plot(embedding, data['Z_B'], is_continuous=True, title='KiDS observations', legend_label=r'$\rm z_B$')
     if 'Z_PHOTO' in data:
         idx = (data['CLASS_PHOTO'] == 'QSO')
-        partial_plot(embedding[idx], data.loc[idx]['Z_PHOTO'], is_continuous=True, title=r'$QSO_{candidate}$',
-                     legend_label=r'$z_{photo}$')
+        partial_plot(embedding[idx], data.loc[idx]['Z_PHOTO'], is_continuous=True, title=r'$\rm QSO_{candidate}$',
+                     legend_label=r'$\rm z_{photo}$')
         idx = ((data['CLASS_PHOTO'] == 'QSO') & (data['catalog'] != 'None'))
         partial_plot(embedding[idx], data.loc[idx]['Z_PHOTO'], is_continuous=True,
-                     title=r'final catalog $QSO_{candidate}$', legend_label=r'$z_{photo}$')
+                     title=r'final catalog $\rm QSO_{candidate}$', legend_label=r'$\rm z_{photo}$')
 
     if 'Z_PHOTO_STDDEV' in data:
         idx = (data['CLASS_PHOTO'] == 'QSO')
-        partial_plot(embedding[idx], data.loc[idx]['Z_PHOTO_STDDEV'], is_continuous=True, title=r'$QSO_{candidate}$',
-                     legend_label='$z_{photo}$ uncertainty')
+        partial_plot(embedding[idx], data.loc[idx]['Z_PHOTO_STDDEV'], is_continuous=True,
+                     title=r'$\rm QSO_{candidate}$', legend_label=r'$\rm z_{photo}$ uncertainty')
 
 
 def plot_embedding(embedding, labels, title='class', is_continuous=False, alpha=0.5, color_palette='cubehelix',
@@ -467,7 +480,7 @@ def plot_external_qso_consistency(catalog):
                  color=color_palette[i])
 
     plt.xlabel(r'KiDS minimum photo probability')
-    plt.ylabel(r'KiDS QSO$_{photo}$ contribution')
+    plt.ylabel(r'KiDS $\rm QSO_{cand}$ contribution')
     legend = plt.legend(loc='lower left', framealpha=1.0)
     plt.tight_layout()
 
