@@ -44,26 +44,27 @@ def get_flag_gaap_str(band):
 BANDS_OPTI = ['u', 'g', 'r', 'i']
 BANDS_IR = ['Z', 'Y', 'J', 'H', 'Ks']
 BANDS = BANDS_OPTI + BANDS_IR
-BAND_NEXT_PAIRS = [('u', 'g'), ('g', 'r'), ('r', 'i'), ('i', 'Z'), ('Z', 'Y'), ('Y', 'J'), ('J', 'H'), ('H', 'Ks')]
+PAIRS_R = [('r', 'u'), ('r', 'g'), ('r', 'i'), ('r', 'Z'), ('r', 'Y'), ('r', 'J'), ('r', 'H'), ('r', 'Ks')]
 
 
-def get_mag_gaap_cols(bands=BANDS):
+
+def get_mag_gaap_cols(bands):
     return [get_mag_str(band) for band in bands]
 
 
-def get_color_cols(band_tuples=BAND_NEXT_PAIRS):
+def get_color_cols(band_tuples):
     return [get_color_str(band_1, band_2) for band_1, band_2 in band_tuples]
 
 
-def get_ratio_cols(band_tuples=BAND_NEXT_PAIRS):
+def get_ratio_cols(band_tuples):
     return [get_ratio_str(band_1, band_2) for band_1, band_2 in band_tuples]
 
 
-def get_magerr_gaap_cols(bands=BANDS):
+def get_magerr_gaap_cols(bands):
     return [get_magerr_str(band) for band in bands]
 
 
-def get_flags_gaap_cols(bands=BANDS):
+def get_flags_gaap_cols(bands):
     return [get_flag_gaap_str(band) for band in bands]
 
 
@@ -85,6 +86,7 @@ BAND_ERR_COLUMNS = get_magerr_gaap_cols(BANDS)
 COLOR_COLUMNS = get_color_cols(get_all_pairs(BANDS))
 COLOR_COLUMNS_OPTI = get_color_cols(get_all_pairs(BANDS_OPTI))
 COLOR_NEXT_COLUMNS = get_color_cols(get_next_pairs(BANDS))
+COLOR_R_COLUMNS = get_color_cols(PAIRS_R)
 RATIO_COLUMNS = get_ratio_cols(get_all_pairs(BANDS))
 RATIO_COLUMNS_OPTI = get_ratio_cols(get_all_pairs(BANDS_OPTI))
 FLAGS_GAAP_COLUMNS = get_flags_gaap_cols(BANDS)
@@ -113,14 +115,19 @@ def get_band_features(bands):
     return features
 
 
+SHAPE_CLASSIFIERS = ['CLASS_STAR', 'SG2DPHOT_3']
+
 FEATURES = {
-    'all': BAND_COLUMNS + COLOR_COLUMNS + RATIO_COLUMNS + ['CLASS_STAR', 'SG2DPHOT_3'],
-    'optical': BAND_COLUMNS_OPTI + COLOR_COLUMNS_OPTI + RATIO_COLUMNS_OPTI + ['CLASS_STAR', 'SG2DPHOT_3'],
+    'all': BAND_COLUMNS + COLOR_COLUMNS + RATIO_COLUMNS + SHAPE_CLASSIFIERS,
+    'magnitudes': BAND_COLUMNS + SHAPE_CLASSIFIERS,
+    'colors-ratios': COLOR_COLUMNS + RATIO_COLUMNS + SHAPE_CLASSIFIERS,
     'no-sg': BAND_COLUMNS + COLOR_COLUMNS + RATIO_COLUMNS,
-    'colors': COLOR_COLUMNS + RATIO_COLUMNS,
-    'top-clf': BAND_COLUMNS + COLOR_COLUMNS_CLF + RATIO_COLUMNS_CLF + ['CLASS_STAR', 'SG2DPHOT_3'],
-    'top-reg': BAND_COLUMNS + COLOR_COLUMNS_REG + RATIO_COLUMNS_REG + ['CLASS_STAR', 'SG2DPHOT_3'],
-    'no-u': get_band_features(['g', 'r', 'i', 'Z', 'Y', 'J', 'H', 'Ks']) + ['CLASS_STAR', 'SG2DPHOT_3'],
+    'no-ratios': BAND_COLUMNS + COLOR_COLUMNS + SHAPE_CLASSIFIERS,
+    'optical': BAND_COLUMNS_OPTI + COLOR_COLUMNS_OPTI + RATIO_COLUMNS_OPTI + SHAPE_CLASSIFIERS,
+    '1-mag-8-colors': get_mag_gaap_cols('r') + COLOR_R_COLUMNS + SHAPE_CLASSIFIERS,
+    'top-clf': BAND_COLUMNS + COLOR_COLUMNS_CLF + RATIO_COLUMNS_CLF + SHAPE_CLASSIFIERS,
+    'top-reg': BAND_COLUMNS + COLOR_COLUMNS_REG + RATIO_COLUMNS_REG + SHAPE_CLASSIFIERS,
+    'no-u': get_band_features(['g', 'r', 'i', 'Z', 'Y', 'J', 'H', 'Ks']) + SHAPE_CLASSIFIERS,
 }
 
 EXTERNAL_QSO = [
