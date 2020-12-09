@@ -12,6 +12,7 @@ import seaborn as sns
 from matplotlib import pyplot as plt
 from sklearn.metrics import accuracy_score, f1_score, confusion_matrix, log_loss, roc_curve, auc, precision_score, \
     recall_score, average_precision_score, precision_recall_curve, mean_squared_error, r2_score
+from sklearn.utils import resample
 from astropy.cosmology import WMAP9 as cosmo_wmap9
 from astropy.cosmology import z_at_value
 import astropy.units as u
@@ -23,6 +24,14 @@ from data import DATA_PATH, EXTERNAL_QSO, BASE_CLASSES, BAND_COLUMNS, clean_gaia
 from utils import assign_redshift, pretty_print_magnitude, get_column_desc, get_map
 from plotting import PLOT_TEXTS, plot_confusion_matrix, plot_roc_curve, plot_precision_recall_curve, get_line_style, \
     get_cubehelix_palette, plot_proba_histograms, get_plot_text
+
+
+def bootstrap_metric(metric_func, y_true, y_pred, n_samples=100):
+    np.random.seed(13668)
+    scores = [metric_func(*(resample(y_true, y_pred))) for _ in range(n_samples)]
+    score = np.mean(scores)
+    error = np.std(scores) / len(scores)
+    return score, error
 
 
 def relative_err_mean(y_true, y_pred):
@@ -104,14 +113,14 @@ def multiclass_report(predictions, col_true='CLASS'):
     y_true = predictions[col_true]
     y_pred = predictions['CLASS_PHOTO']
 
-    acc = accuracy_score(y_true, y_pred)
-    print('Accuracy = {:.4f}'.format(acc))
+    acc, acc_err = bootstrap_metric(accuracy_score, y_true, y_pred)
+    print('Accuracy = {:.4f} ({:.4f})'.format(acc, acc_err))
 
     f1 = f1_score(y_true, y_pred, average=None)
     print('F1 per class = {}'.format(f1))
 
-    logloss = log_loss(y_true, predictions[['GALAXY_PHOTO', 'QSO_PHOTO', 'STAR_PHOTO']])
-    print('Logloss = {:.4f}'.format(logloss))
+    logloss, logloss_err = bootstrap_metric(log_loss, y_true, predictions[['GALAXY_PHOTO', 'QSO_PHOTO', 'STAR_PHOTO']])
+    print('Logloss = {:.4f} ({:.4f})'.format(logloss, logloss_err))
 
     # Confusion matrices
     cnf_matrix = confusion_matrix(y_true, y_pred)
@@ -136,18 +145,18 @@ def binary_report(predictions, col_true='CLASS'):
     n_all = len(y_pred_binary)
     print('Predicted positives: {}/{} ({:.2f}%)'.format(n_pos, n_all, n_pos / n_all * 100))
 
-    logloss = log_loss(y_true, y_pred_proba)
-    print('Logloss = {:.4f}'.format(logloss))
+    logloss, logloss_err = bootstrap_metric(log_loss, y_true, y_pred_proba)
+    print('Logloss = {:.4f} ({:.4f})'.format(logloss, logloss_err))
 
     binary_metrics = OrderedDict([
-        ('Accuracy', accuracy_score),
-        ('F1', f1_score),
-        ('Precision', precision_score),
-        ('Recall', recall_score),
+        ('Accuracy', partial(bootstrap_metric, accuracy_score)),
+        ('F1', partial(bootstrap_metric, f1_score)),
+        ('Precision', partial(bootstrap_metric, precision_score)),
+        ('Recall', partial(bootstrap_metric, recall_score)),
     ])
     for metric_name, metric_func in binary_metrics.items():
-        metric_value = metric_func(y_true, y_pred_binary)
-        print('{} = {:.4f}'.format(metric_name, metric_value))
+        score, score_err = metric_func(y_true, y_pred_binary)
+        print('{} = {:.4f} ({:.4f})'.format(metric_name, score, score_err))
 
     # ROC AUC
     fpr, tpr, _ = roc_curve(y_true, y_pred_proba)
@@ -199,26 +208,34 @@ def completeness_z_report(predictions, col_true='CLASS', z_max=None):
 
 
 def redshift_metrics(predictions):
-    classes = np.unique(predictions['CLASS'])
+    classes = ['QSO']  # TODO: np.unique(predictions['CLASS'])
     # Two redshift assignment options
     z_photo_wspec_col = 'Z_PHOTO_WSPEC' if 'Z_PHOTO_WSPEC' in predictions else 'Z_PHOTO'
     reports = [('CLASS', z_photo_wspec_col, 'spec. subsets'), ('CLASS_PHOTO', 'Z_PHOTO', 'photo subsets')]
     for class_col, z_photo_col, name in reports:
         print(name)
         # Standard metrics
-        metrics = [('MSE', mean_squared_error), ('R2', r2_score),
-                   ('rel. error', relative_err_mean), ('rel. error std', relative_err_std)]
+        metrics = [
+            ('MSE', partial(bootstrap_metric, mean_squared_error)),
+            ('R2', partial(bootstrap_metric, r2_score)),
+            ('rel. error', partial(bootstrap_metric, relative_err_mean)),
+            ('rel. error std', partial(bootstrap_metric, relative_err_std)),
+        ]
         for metric_name, metric_func in metrics:
-            score = np.around(metric_func(predictions['Z'], predictions[z_photo_col]), 4)
-            print('{metric_name}: {score}'.format(metric_name=metric_name, score=score))
+            # TODO
+            # score, score_err = np.around(metric_func(predictions['Z'], predictions[z_photo_col]), 4)
+            # print('{metric_name}: {score} ({score_err})'.format(metric_name=metric_name, score=score,
+            #                                                     score_err=score_err))
 
             # Divided for classes
             if class_col not in predictions:
                 continue
             scores = np.around(metric_class_split(predictions['Z'], predictions[z_photo_col], metric=metric_func,
-                                                  classes=predictions[class_col]), 4)
-            print(', '.join(['{class_name}: {score}'.format(class_name=class_name, score=score) for class_name, score in
-                             zip(classes, scores)]))
+                                                  classes=predictions[class_col], classes_to_process=classes), 4)
+            print(metric_name)  # TODO: remove
+            print(', '.join(['{class_name}: {score} ({score_err})'.format(class_name=class_name, score=score_tuple[0],
+                                                                          score_err=score_tuple[1]) for
+                             class_name, score_tuple in zip(classes, scores)]))
 
 
 def redshift_scatter_plots(predictions, z_max):
@@ -251,8 +268,9 @@ def redshift_scatter_plot(predictions, z_pred_col, z_max, color_column=None, tit
         cb = f.colorbar(points)
         cb.set_label(get_plot_text(color_column))
 
-    plt.show()
-    if return_figure:
+    if not return_figure:
+        plt.show()
+    else:
         return f
 
 
@@ -396,9 +414,10 @@ def plot_cleaning_metrics(preds_class, cls, metrics_to_plot, thresholds, step, c
     return ax_arr[0].get_ylim()
 
 
-def metric_class_split(y_true, y_pred, classes, metric):
+def metric_class_split(y_true, y_pred, classes, metric, classes_to_process=None):
     scores = []
-    for c in np.unique(classes):
+    classes_to_process = np.unique(classes) if classes_to_process is None else classes_to_process
+    for c in classes_to_process:
         c_idx = np.array((classes == c))
         scores.append(metric(y_true[c_idx], y_pred[c_idx]))
     return scores

@@ -239,10 +239,13 @@ def save_catalog(catalog, exp_name, timestamp):
     logger.info('catalog saved to: {}'.format(catalog_path))
 
 
-def assign_redshift(preds_clf, preds_z_qso, preds_z_galaxy):
+def assign_redshift(preds_clf, preds_z_qso, preds_z_galaxy=None):
     for class_column, column_suffix in [('CLASS', '_WSPEC'), ('CLASS_PHOTO', '')]:
         # Quasar and galaxy
-        for cls, preds_z in [('QSO', preds_z_qso), ('GALAXY', preds_z_galaxy)]:
+        cls_preds_arr = [('QSO', preds_z_qso)]
+        if preds_z_galaxy is not None:
+            cls_preds_arr.append(('GALAXY', preds_z_galaxy))
+        for cls, preds_z in cls_preds_arr:
             mask = (preds_clf[class_column] == cls)
             for col in ['Z_PHOTO', 'Z_PHOTO_STDDEV']:
                 if col in preds_z:  # STDDEV might not be there

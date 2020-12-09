@@ -44,7 +44,7 @@ def get_flag_gaap_str(band):
 BANDS_OPTI = ['u', 'g', 'r', 'i']
 BANDS_IR = ['Z', 'Y', 'J', 'H', 'Ks']
 BANDS = BANDS_OPTI + BANDS_IR
-PAIRS_R = [('r', 'u'), ('r', 'g'), ('r', 'i'), ('r', 'Z'), ('r', 'Y'), ('r', 'J'), ('r', 'H'), ('r', 'Ks')]
+PAIRS_R = [('u', 'r'), ('g', 'r'), ('r', 'i'), ('r', 'Z'), ('r', 'Y'), ('r', 'J'), ('r', 'H'), ('r', 'Ks')]
 
 
 

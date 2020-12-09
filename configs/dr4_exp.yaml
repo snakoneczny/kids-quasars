@@ -4,16 +4,17 @@ inference_data: KiDS.DR4.cols
 
 model: rf
 
-pred_class: True
+pred_class: False
 
-pred_z: False
+pred_z: True
 
-specialization:
+specialization: QSO
 
 cut:
 
 bands: [u, g, r, i, Z, Y, J, H, Ks]
 
-features_key: all
+features_key: no-ratios
 
 test_method: magnitude
+
